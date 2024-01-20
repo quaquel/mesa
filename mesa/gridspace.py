@@ -1,12 +1,81 @@
 import itertools
 import random
+from weakref import WeakKeyDictionary
 from functools import cache
-from typing import Any
+from typing import Any, Callable, Iterable
+from collections import defaultdict
+import warnings
+import contextlib
+from random import Random
 
-from mesa import Agent
+from mesa import Agent, Model
+from mesa.agent import AgentSet
 
 Coordinates = tuple[int, int]
+from line_profiler_pycharm import profile
 
+class CellAgent:
+    """
+    Base class for a model agent in Mesa.
+
+    Attributes:
+        unique_id (int): A unique identifier for this agent.
+        model (Model): A reference to the model instance.
+        self.pos: Position | None = None
+    """
+
+    def __init__(self, unique_id: int, model: Model) -> None:
+        """
+        Create a new agent.
+
+        Args:
+            unique_id (int): A unique identifier for this agent.
+            model (Model): The model instance in which the agent exists.
+        """
+        self.unique_id = unique_id
+        self.model = model
+        self.cell: Cell | None = None
+
+        # register agent
+        try:
+            self.model.agents_[type(self)][self] = None
+        except AttributeError:
+            # model super has not been called
+            self.model.agents_ = defaultdict(dict)
+            self.model.agentset_experimental_warning_given = False
+
+            warnings.warn(
+                "The Mesa Model class was not initialized. In the future, you need to explicitly initialize the Model by calling super().__init__() on initialization.",
+                FutureWarning,
+                stacklevel=2,
+            )
+
+    @property
+    def pos(self):
+        return self.cell.coords
+
+    def pos(self):
+        return self.cell.coords
+
+
+    def remove(self) -> None:
+        """Remove and delete the agent from the model."""
+        with contextlib.suppress(KeyError):
+            self.model.agents_[type(self)].pop(self)
+
+    def step(self) -> None:
+        """A single step of the agent."""
+
+    def advance(self) -> None:
+        pass
+
+    @property
+    def random(self) -> Random:
+        return self.model.random
+
+
+# # TODO what about turning this into a callable class?
+# # so Neighborhood()
 
 def create_neighborhood_getter(moore=True, include_center=False, radius=1):
     @cache
@@ -17,9 +86,9 @@ def create_neighborhood_getter(moore=True, include_center=False, radius=1):
         neighborhood = {}
         for neighbor in cell.connections:
             if (
-                moore
-                or neighbor.coords[0] == cell.coords[0]
-                or neighbor.coords[1] == cell.coords[1]
+                    moore
+                    or neighbor.coords[0] == cell.coords[0]
+                    or neighbor.coords[1] == cell.coords[1]
             ):
                 neighborhood[neighbor] = neighbor.content
 
@@ -44,8 +113,8 @@ class Cell:
 
     def __init__(self, i: int, j: int) -> None:
         self.coords = (i, j)
-        self.connections: list[Cell] = []
-        self.content: list[Agent] = []
+        self.connections: list[Cell] = [] # TODO: change to CellCollection?
+        self.content = {} # TODO:: change to AgentSet or weakrefs? (neither is very performant, )
 
     def connect(self, other) -> None:
         """Connects this cell to another cell."""
@@ -57,20 +126,20 @@ class Cell:
 
     def add_agent(self, agent: Agent) -> None:
         """Adds an agent to the cell."""
-        self.content.append(agent)
+        self.content[agent] = None
         agent.cell = self
 
     def remove_agent(self, agent: Agent) -> None:
         """Removes an agent from the cell."""
-        if agent in self.content:
-            self.content.remove(agent)
+        self.content.pop(agent, None)
 
     def __repr__(self):
         return f"Cell({self.coords})"
 
 
+
 class CellCollection:
-    def __init__(self, cells: dict[Cell, list[Agent]]) -> None:
+    def __init__(self, cells: dict[Cell, Iterable[Agent]]) -> None:
         self.cells = cells
 
     def __iter__(self):
@@ -87,13 +156,21 @@ class CellCollection:
 
     @property
     def agents(self):
+        # should this not return an agentset
+        # changing this makes the code potentially slow
         return itertools.chain.from_iterable(self.cells.values())
 
     def select_random(self):
         return random.choice(list(self.cells.keys()))
 
+    def update(self, other):
+        self.cells.update(other.cells)
 
-class Space:
+    #     # TODO:: what about shuffle, select, sort, add, and remove
+    #     # TODO:: How close do we want to mimic the behavior of AgentSet
+
+
+class DiscreteSpace:
     cells: dict[Coordinates, Cell]
 
     def _connect_single_cell(self, cell):  # <= different for every concrete Space
@@ -102,40 +179,38 @@ class Space:
     def __iter__(self):
         return iter(self.cells.values())
 
-    def get_neighborhood(self, coords: Coordinates, neighborhood_getter: Any):
+    def get_neighborhood(self, coords: Coordinates, neighborhood_getter: Callable):
+        # TODO:: what is the point of this method. You have the ccoordiantes. and the
+        # TODO:: getter, why run it through the grid
         return neighborhood_getter(self.cells[coords])
 
     def move_agent(self, agent: Agent, pos) -> None:
         """Move an agent from its current position to a new position."""
         if (old_cell := agent.cell) is not None:
             old_cell.remove_agent(agent)
-            if self._empties_built:
-                self._empties.add(old_cell.coords)
+            self._empties[old_cell.coords] = None
 
         new_cell = self.cells[pos]
         new_cell.add_agent(agent)
-        if self._empties_built:
-            self._empties.discard(new_cell.coords)
+
+        self._empties.pop(new_cell.coords, None)
 
     @property
     def empties(self) -> CellCollection:
-        if not self._empties_built:
-            self.build_empties()
 
         return CellCollection(
             {
                 self.cells[coords]: self.cells[coords].content
-                for coords in sorted(self._empties)
+                for coords in self._empties
             }
         )
 
-    def build_empties(self) -> None:
-        self._empties = set(filter(self.is_cell_empty, self.cells.keys()))
-        self._empties_built = True
-
     def move_to_empty(self, agent: Agent) -> None:
         """Moves agent to a random empty cell, vacating agent's old cell."""
-        num_empty_cells = len(self.empties)
+        # if not self._empties_built:
+        #     self.build_empties()
+
+        num_empty_cells = len(self._empties)
         if num_empty_cells == 0:
             raise Exception("ERROR: No empty cells")
 
@@ -150,10 +225,12 @@ class Space:
                     agent.random.randrange(self.width),
                     agent.random.randrange(self.height),
                 )
-                if self.is_cell_empty(new_pos):
+                if new_pos in self._empties:
                     break
+                # if self.is_cell_empty(new_pos):
+                #     break
         else:
-            new_pos = self.empties.select_random().coords
+            new_pos = random.choice(list(self._empties.keys()))
         self.move_agent(agent, new_pos)
 
     def is_cell_empty(self, pos) -> bool:
@@ -161,14 +238,15 @@ class Space:
         return len(self.cells[pos].content) == 0
 
 
-class Grid(Space):
+class Grid(DiscreteSpace):
     def __init__(self, width: int, height: int, torus: bool = False) -> None:
+        super().__init__()
         self.width = width
         self.height = height
         self.torus = torus
         self.cells = {(i, j): Cell(i, j) for j in range(width) for i in range(height)}
+        self._empties = {(i, j): None for j in range(width) for i in range(height)}
 
-        self._empties_built = False
         self.cutoff_empties = 7.953 * len(self.cells) ** 0.384
 
         for cell in self.cells.values():

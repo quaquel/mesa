@@ -12,6 +12,7 @@ from mesa.agent import Agent
 from mesa.batchrunner import batch_run
 from mesa.datacollection import DataCollector
 from mesa.model import Model
+from mesa import gridspace
 
 __all__ = [
     "Model",
