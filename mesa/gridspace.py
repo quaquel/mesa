@@ -135,10 +135,13 @@ class Cell:
         if len(self.content) == 0:
             self.space._empties[self.coords] = None
 
+
     @cache
     def get_neighborhood(self, moore=True, include_center=False, radius=1):
         return CellCollection(self._get_neighborhood(moore=moore, include_center=include_center, radius=radius))
 
+
+    @cache
     def _get_neighborhood(self, moore=True, include_center=False, radius=1):
         if radius == 0:
             return {self: self.content}
