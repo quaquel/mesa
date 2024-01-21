@@ -1,5 +1,5 @@
 # Benchmarking
-benchmarks/**/*.pickle
+benchmarking/**/*.pickle
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -69,7 +69,6 @@ target/
 
 # PyCharm environment files
 .idea/
-*.pclprof
 
 # VSCode environment files
 .vscode/
@@ -89,4 +88,6 @@ pythonenv*/
 # JS dependencies
 mesa/visualization/templates/external/
 mesa/visualization/templates/js/external/
-
+*.pclprof
+*.pickle
+*.pclprof

@@ -1,18 +1,18 @@
 import itertools
 import random
-from weakref import WeakKeyDictionary
-from functools import cache
-from typing import Any, Callable, Iterable
-from collections import defaultdict
 import warnings
-import contextlib
+from collections import defaultdict
+from collections.abc import Iterable
+from functools import cache
 from random import Random
+from typing import Any, Callable
 
 from mesa import Agent, Model
-from mesa.agent import AgentSet
+
+
+from line_profiler_pycharm import profile
 
 Coordinates = tuple[int, int]
-from line_profiler_pycharm import profile
 
 class CellAgent:
     """
@@ -54,14 +54,9 @@ class CellAgent:
     def pos(self):
         return self.cell.coords
 
-    def pos(self):
-        return self.cell.coords
-
-
     def remove(self) -> None:
         """Remove and delete the agent from the model."""
-        with contextlib.suppress(KeyError):
-            self.model.agents_[type(self)].pop(self)
+        self.model.agents_[type(self)].pop(self, None)
 
     def step(self) -> None:
         """A single step of the agent."""
@@ -80,6 +75,7 @@ class CellAgent:
 def create_neighborhood_getter(moore=True, include_center=False, radius=1):
     @cache
     def of(cell: Cell):
+        # TODO:: or raise an error if radius < 1
         if radius == 0:
             return {cell: cell.content}
 
@@ -109,44 +105,59 @@ def create_neighborhood_getter(moore=True, include_center=False, radius=1):
 
 
 class Cell:
-    __slots__ = ["coords", "connections", "content"]
+    __slots__ = ["coords", "connections", "content", "direct_neighborhood", "space"]
 
-    def __init__(self, i: int, j: int) -> None:
+    def __init__(self, i: int, j: int, space) -> None:
         self.coords = (i, j)
         self.connections: list[Cell] = [] # TODO: change to CellCollection?
         self.content = {} # TODO:: change to AgentSet or weakrefs? (neither is very performant, )
+        self.direct_neighborhood = CellCollection({})
+        self.space: DiscreteSpace = space
 
     def connect(self, other) -> None:
         """Connects this cell to another cell."""
         self.connections.append(other)
+        self.direct_neighborhood.cells[other] = other.content
 
     def disconnect(self, other) -> None:
         """Disconnects this cell from another cell."""
         self.connections.remove(other)
+        self.direct_neighborhood.cells.pop(other, None)
 
     def add_agent(self, agent: Agent) -> None:
         """Adds an agent to the cell."""
+        if len(self.content) == 0:
+            self.space._empties.pop(self.coords, None)
         self.content[agent] = None
         agent.cell = self
 
     def remove_agent(self, agent: Agent) -> None:
         """Removes an agent from the cell."""
         self.content.pop(agent, None)
+        agent.cell = None
+        if len(self.content) == 0:
+            self.space._empties[self.coords] = None
 
     def __repr__(self):
         return f"Cell({self.coords})"
 
 
-
 class CellCollection:
+
     def __init__(self, cells: dict[Cell, Iterable[Agent]]) -> None:
         self.cells = cells
 
     def __iter__(self):
         return iter(self.cells)
 
-    def __getitem__(self, key):
+    def __getitem__(self, key:Cell) -> Iterable[Agent]:
         return self.cells[key]
+
+    def __setitem__(self, key:Cell, value:Iterable[Agent]):
+        self.cells[key] = value
+
+    def __delitem__(self, key:Cell):
+        del self.cells[key]
 
     def __len__(self):
         return len(self.cells)
@@ -161,7 +172,7 @@ class CellCollection:
         return itertools.chain.from_iterable(self.cells.values())
 
     def select_random(self):
-        return random.choice(list(self.cells.keys()))
+        random.choice(list(self.cells.keys()))
 
     def update(self, other):
         self.cells.update(other.cells)
@@ -180,20 +191,16 @@ class DiscreteSpace:
         return iter(self.cells.values())
 
     def get_neighborhood(self, coords: Coordinates, neighborhood_getter: Callable):
-        # TODO:: what is the point of this method. You have the ccoordiantes. and the
+        # TODO:: what is the point of this method. You have the ccoordinates. and the
         # TODO:: getter, why run it through the grid
         return neighborhood_getter(self.cells[coords])
 
-    def move_agent(self, agent: Agent, pos) -> None:
+    def move_agent(self, agent: Agent, new_cell: Cell) -> None:
         """Move an agent from its current position to a new position."""
-        if (old_cell := agent.cell) is not None:
-            old_cell.remove_agent(agent)
-            self._empties[old_cell.coords] = None
 
-        new_cell = self.cells[pos]
+        agent.cell.remove_agent(agent)
         new_cell.add_agent(agent)
 
-        self._empties.pop(new_cell.coords, None)
 
     @property
     def empties(self) -> CellCollection:
@@ -205,10 +212,9 @@ class DiscreteSpace:
             }
         )
 
-    def move_to_empty(self, agent: Agent) -> None:
+    # @profile
+    def move_to_empty(self, agent) -> Cell:
         """Moves agent to a random empty cell, vacating agent's old cell."""
-        # if not self._empties_built:
-        #     self.build_empties()
 
         num_empty_cells = len(self._empties)
         if num_empty_cells == 0:
@@ -222,16 +228,15 @@ class DiscreteSpace:
         if num_empty_cells > self.cutoff_empties:
             while True:
                 new_pos = (
-                    agent.random.randrange(self.width),
-                    agent.random.randrange(self.height),
+                    random.randrange(self.width),
+                    random.randrange(self.height),
                 )
                 if new_pos in self._empties:
                     break
-                # if self.is_cell_empty(new_pos):
-                #     break
         else:
             new_pos = random.choice(list(self._empties.keys()))
-        self.move_agent(agent, new_pos)
+
+        self.move_agent(agent, self.cells[new_pos])
 
     def is_cell_empty(self, pos) -> bool:
         """Returns a bool of the contents of a cell."""
@@ -244,9 +249,9 @@ class Grid(DiscreteSpace):
         self.width = width
         self.height = height
         self.torus = torus
-        self.cells = {(i, j): Cell(i, j) for j in range(width) for i in range(height)}
-        self._empties = {(i, j): None for j in range(width) for i in range(height)}
+        self.cells = {(i, j): Cell(i, j, self) for j in range(width) for i in range(height)}
 
+        self._empties = {(i, j): None for j in range(width) for i in range(height)}
         self.cutoff_empties = 7.953 * len(self.cells) ** 0.384
 
         for cell in self.cells.values():
