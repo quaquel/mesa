@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Any, Callable
 if TYPE_CHECKING:
     # We ensure that these are not imported during runtime to prevent cyclic
     # dependency.
-    from mesa.gridspace import Cell
     from mesa.model import Model
     from mesa.space import Position
 

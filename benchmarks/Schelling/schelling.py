@@ -1,10 +1,9 @@
+
+
 from mesa import Model
 from mesa.gridspace import CellAgent, Grid
 from mesa.time import RandomActivation
 
-import itertools
-
-from line_profiler_pycharm import profile
 
 class SchellingAgent(CellAgent):
     """

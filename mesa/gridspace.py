@@ -9,9 +9,6 @@ from typing import Any, Callable
 
 from mesa import Agent, Model
 
-
-from line_profiler_pycharm import profile
-
 Coordinates = tuple[int, int]
 
 class CellAgent:
