@@ -155,8 +155,8 @@ class Cell:
             ):
                 neighborhood[neighbor] = neighbor.content
 
-        radius = radius - 1
         if radius > 1:
+            radius = radius - 1
             for neighbor in list(neighborhood.keys()):
                 neighborhood.update(neighbor._get_neighborhood(moore, include_center, radius))
 
