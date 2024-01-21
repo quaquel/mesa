@@ -69,39 +69,36 @@ class CellAgent:
         return self.model.random
 
 
-# # TODO what about turning this into a callable class?
-# # so Neighborhood()
-
-def create_neighborhood_getter(moore=True, include_center=False, radius=1):
-    @cache
-    def of(cell: Cell):
-        # TODO:: or raise an error if radius < 1
-        if radius == 0:
-            return {cell: cell.content}
-
-        neighborhood = {}
-        for neighbor in cell.connections:
-            if (
-                    moore
-                    or neighbor.coords[0] == cell.coords[0]
-                    or neighbor.coords[1] == cell.coords[1]
-            ):
-                neighborhood[neighbor] = neighbor.content
-
-        if radius > 1:
-            for neighbor in list(neighborhood.keys()):
-                neighborhood.update(
-                    create_neighborhood_getter(moore, include_center, radius - 1)(
-                        neighbor
-                    )
-                )
-
-        if not include_center:
-            neighborhood.pop(cell, None)
-
-        return CellCollection(neighborhood)
-
-    return of
+# def create_neighborhood_getter(moore=True, include_center=False, radius=1):
+#     # TODO:: or raise an error if radius < 1
+#     @cache
+#     def of(cell: Cell):
+#         if radius == 0:
+#             return {cell: cell.content}
+#
+#         neighborhood = {}
+#         for neighbor in cell.connections:
+#             if (
+#                     moore
+#                     or neighbor.coords[0] == cell.coords[0]
+#                     or neighbor.coords[1] == cell.coords[1]
+#             ):
+#                 neighborhood[neighbor] = neighbor.content
+#
+#         if radius > 1:
+#             for neighbor in list(neighborhood.keys()):
+#                 neighborhood.update(
+#                     create_neighborhood_getter(moore, include_center, radius - 1)(
+#                         neighbor
+#                     )
+#                 )
+#
+#         if not include_center:
+#             neighborhood.pop(cell, None)
+#
+#         return CellCollection(neighborhood)
+#
+#     return of
 
 
 class Cell:
@@ -138,6 +135,33 @@ class Cell:
         if len(self.content) == 0:
             self.space._empties[self.coords] = None
 
+    @cache
+    def get_neighborhood(self, moore=True, include_center=False, radius=1):
+        return CellCollection(self._get_neighborhood(moore=moore, include_center=include_center, radius=radius))
+
+    def _get_neighborhood(self, moore=True, include_center=False, radius=1):
+        if radius == 0:
+            return {self: self.content}
+
+        neighborhood = {}
+        for neighbor in self.connections:
+            if (
+                    moore
+                    or neighbor.coords[0] == self.coords[0]
+                    or neighbor.coords[1] == self.coords[1]
+            ):
+                neighborhood[neighbor] = neighbor.content
+
+        radius = radius - 1
+        if radius > 1:
+            for neighbor in list(neighborhood.keys()):
+                neighborhood.update(neighbor._get_neighborhood(moore, include_center, radius))
+
+        if not include_center:
+            neighborhood.pop(self, None)
+
+        return neighborhood
+
     def __repr__(self):
         return f"Cell({self.coords})"
 
@@ -166,13 +190,13 @@ class CellCollection:
         return f"CellCollection({self.cells})"
 
     @property
-    def agents(self):
+    def agents(self) -> Iterable[Agent]:
         # should this not return an agentset
         # changing this makes the code potentially slow
         return itertools.chain.from_iterable(self.cells.values())
 
-    def select_random(self):
-        random.choice(list(self.cells.keys()))
+    def select_random(self) -> Cell:
+        return random.choice(list(self.cells.keys()))
 
     def update(self, other):
         self.cells.update(other.cells)
@@ -228,13 +252,13 @@ class DiscreteSpace:
         if num_empty_cells > self.cutoff_empties:
             while True:
                 new_pos = (
-                    random.randrange(self.width),
-                    random.randrange(self.height),
+                    agent.random.randrange(self.width),
+                    agent.random.randrange(self.height),
                 )
                 if new_pos in self._empties:
                     break
         else:
-            new_pos = random.choice(list(self._empties.keys()))
+            new_pos = agent.random.choice(list(self._empties.keys()))
 
         self.move_agent(agent, self.cells[new_pos])
 

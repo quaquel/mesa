@@ -1,10 +1,10 @@
-
-
-
 from mesa import Model
-from mesa.gridspace import CellAgent, Grid, create_neighborhood_getter
+from mesa.gridspace import CellAgent, Grid
 from mesa.time import RandomActivation
 
+import itertools
+
+from line_profiler_pycharm import profile
 
 class SchellingAgent(CellAgent):
     """
@@ -24,11 +24,13 @@ class SchellingAgent(CellAgent):
         self.cell = cell
         self.type = agent_type
         self.radius = radius
-        self.get_neighborhood = create_neighborhood_getter(radius)
+        # self.get_neighborhood = create_neighborhood_getter(radius)
 
+    # @profile
     def step(self):
         similar = 0
-        for neighbor in self.get_neighborhood(self.cell).agents:
+        # for neighbor in self.cell.get_neighborhood(self.cell).agents:
+        for neighbor in self.cell.get_neighborhood(self.radius).agents:
             if neighbor.type == self.type:
                 similar += 1
 
@@ -64,7 +66,7 @@ class Schelling(Model):
             if self.random.random() < self.density:
                 agent_type = 1 if self.random.random() < self.minority_pc else 0
                 agent = SchellingAgent(self.next_id(), self, agent_type, cell, radius)
-                cell.add_agent(agent)
+                self.grid.move_agent(agent, cell)
                 self.schedule.add(agent)
 
         self.running = True
@@ -80,8 +82,8 @@ class Schelling(Model):
 if __name__ == "__main__":
     import time
 
-    model = Schelling(15, 40, 40, 3, 1, 0.625)
-    # model = Schelling(15, 100, 100, 8, 2, 0.8)
+    # model = Schelling(15, 40, 40, 3, 1, 0.625)
+    model = Schelling(15, 100, 100, 8, 2, 0.8)
 
     start_time = time.perf_counter()
     for _ in range(100):
