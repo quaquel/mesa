@@ -67,12 +67,13 @@ The new `AgentSet` class encapsulates and manages collections of agents, streaml
 - Methods like `select`, `shuffle`, `sort`, and `do` for intuitive operations.
 
 **Example:**
+
 ```Python
 # Applying a method to each agent
-model.agents.do('step')
+model._agents.do('step')
 
 # Filtering and shuffling agents
-shuffled_agents = model.agents.select(lambda agent: agent.attribute > threshold).shuffle()
+shuffled_agents = model._agents.select(lambda agent: agent.attribute > threshold).shuffle()
 ```
 _The AgentSet is an experimental feature. We would love feedback on it in #1919._
 

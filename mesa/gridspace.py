@@ -3,9 +3,9 @@ import random
 import warnings
 from collections import defaultdict
 from collections.abc import Iterable
-from functools import cache
+from functools import cache, cached_property
 from random import Random
-from typing import Any, Callable
+from typing import Any, Callable, Optional
 
 from mesa import Agent, Model
 
@@ -99,14 +99,17 @@ class CellAgent:
 
 
 class Cell:
-    __slots__ = ["coords", "connections", "content", "direct_neighborhood", "space"]
+    __slots__ = ["coordinate", "connections", "agents", "direct_neighborhood", "space", "capacity", "properties"]
 
-    def __init__(self, i: int, j: int, space) -> None:
-        self.coords = (i, j)
+    def __init__(self, i: int, j: int, space, capacity: int = 1) -> None:
+        self.coordinate = (i, j)
         self.connections: list[Cell] = [] # TODO: change to CellCollection?
-        self.content = {} # TODO:: change to AgentSet or weakrefs? (neither is very performant, )
+        self.agents: dict[Agent, None] = {} # TODO:: change to AgentSet or weakrefs? (neither is very performant, )
+        self.capacity = capacity
+
         self.direct_neighborhood = CellCollection({})
         self.space: DiscreteSpace = space
+
 
     def connect(self, other) -> None:
         """Connects this cell to another cell."""
@@ -120,17 +123,30 @@ class Cell:
 
     def add_agent(self, agent: Agent) -> None:
         """Adds an agent to the cell."""
-        if len(self.content) == 0:
-            self.space._empties.pop(self.coords, None)
-        self.content[agent] = None
+        if len(self.agents) >= self.capacity:
+            # TODO:: Fixme should be the proper type of exception
+            raise Exception("ERROR: Cell is full")
+        if len(self.agents) == 0:
+            self.space._empties.pop(self.coordinate, None)
+        self.agents[agent] = None
         agent.cell = self
 
     def remove_agent(self, agent: Agent) -> None:
         """Removes an agent from the cell."""
-        self.content.pop(agent, None)
+        self.agents.pop(agent, None)
         agent.cell = None
-        if len(self.content) == 0:
-            self.space._empties[self.coords] = None
+        if len(self.agents) == 0:
+            self.space._empties[self.coordinate] = None
+
+    @property
+    def is_empty(self) -> bool:
+        """Returns a bool of the contents of a cell."""
+        return len(self.agents) == 0
+
+    @property
+    def is_full(self) -> bool:
+        """Returns a bool of the contents of a cell."""
+        return len(self.agents) == self.capacity
 
 
     @cache
@@ -177,11 +193,11 @@ class CellCollection:
     def __getitem__(self, key:Cell) -> Iterable[Agent]:
         return self.cells[key]
 
-    def __setitem__(self, key:Cell, value:Iterable[Agent]):
-        self.cells[key] = value
-
-    def __delitem__(self, key:Cell):
-        del self.cells[key]
+    # def __setitem__(self, key:Cell, value:Iterable[Agent]):
+    #     self.cells[key] = value
+    #
+    # def __delitem__(self, key:Cell):
+    #     del self.cells[key]
 
     def __len__(self):
         return len(self.cells)
@@ -189,17 +205,37 @@ class CellCollection:
     def __repr__(self):
         return f"CellCollection({self.cells})"
 
+    # TODO:: can we really cache this? Only if Collection is immutable
+    @cached_property
+    def cells(self):
+        return list(self._cells.keys())
+
     @property
     def agents(self) -> Iterable[Agent]:
         # should this not return an agentset
         # changing this makes the code potentially slow
         return itertools.chain.from_iterable(self.cells.values())
 
-    def select_random(self) -> Cell:
+    def select_random_cell(self) -> Cell:
         return random.choice(list(self.cells.keys()))
+
+    def select_random_agent(self) -> Agent:
+        return random.choice(list(self.agents))
 
     def update(self, other):
         self.cells.update(other.cells)
+
+    def select_cells(self, filter_func: Optional[Callable[[Cell], bool]] = None, n=0) :
+        if filter_func is None and n == 0:
+            return self
+
+        return CellCollection(
+            {
+                cell: agents
+                for cell, agents in self._cells.items()
+                if filter_func is None or filter_func(cell)
+            }
+        )
 
     #     # TODO:: what about shuffle, select, sort, add, and remove
     #     # TODO:: How close do we want to mimic the behavior of AgentSet
