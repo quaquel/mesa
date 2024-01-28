@@ -28,7 +28,7 @@ class SchellingAgent(CellAgent):
     # @profile
     def step(self):
         similar = 0
-        for neighbor in self.cell.get_neighborhood(radius=self.radius)._agents:
+        for neighbor in self.cell.get_neighborhood(radius=self.radius).agents:
             if neighbor.type == self.type:
                 similar += 1
 

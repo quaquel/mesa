@@ -30,7 +30,7 @@ class SchellingAgent(mesa.Agent):
 
         # If unhappy, move:
         if similar < self.model.homophily:
-            self.model.grid.move_to_empty(self)
+            self.model.grid.select_random_empty_cell(self)
         else:
             self.model.happy += 1
 

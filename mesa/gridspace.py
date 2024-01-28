@@ -99,7 +99,7 @@ class CellAgent:
 
 
 class Cell:
-    __slots__ = ["coordinate", "connections", "agents", "direct_neighborhood", "space", "capacity", "properties"]
+    __slots__ = ["coordinate", "connections", "agents", "space", "capacity", "properties"]
 
     def __init__(self, i: int, j: int, space, capacity: int = 1) -> None:
         self.coordinate = (i, j)
@@ -107,19 +107,16 @@ class Cell:
         self.agents: dict[Agent, None] = {} # TODO:: change to AgentSet or weakrefs? (neither is very performant, )
         self.capacity = capacity
 
-        self.direct_neighborhood = CellCollection({})
         self.space: DiscreteSpace = space
 
 
     def connect(self, other) -> None:
         """Connects this cell to another cell."""
         self.connections.append(other)
-        self.direct_neighborhood.cells[other] = other.content
 
     def disconnect(self, other) -> None:
         """Disconnects this cell from another cell."""
         self.connections.remove(other)
-        self.direct_neighborhood.cells.pop(other, None)
 
     def add_agent(self, agent: Agent) -> None:
         """Adds an agent to the cell."""
@@ -166,7 +163,7 @@ class Cell:
                     or neighbor.coords[0] == self.coords[0]
                     or neighbor.coords[1] == self.coords[1]
             ):
-                neighborhood[neighbor] = neighbor.content
+                neighborhood[neighbor] = neighbor.agents
 
         if radius > 1:
             radius = radius - 1
@@ -304,12 +301,12 @@ class DiscreteSpace:
 
 
 class Grid(DiscreteSpace):
-    def __init__(self, width: int, height: int, torus: bool = False) -> None:
+    def __init__(self, width: int, height: int, torus: bool = False, capacity : int = 1) -> None:
         super().__init__()
         self.width = width
         self.height = height
         self.torus = torus
-        self.cells = {(i, j): Cell(i, j, self) for j in range(width) for i in range(height)}
+        self.cells = {(i, j): Cell(i, j, self, capacity) for j in range(width) for i in range(height)}
 
         self._empties = {(i, j): None for j in range(width) for i in range(height)}
         self.cutoff_empties = 7.953 * len(self.cells) ** 0.384
@@ -318,7 +315,7 @@ class Grid(DiscreteSpace):
             self._connect_single_cell(cell)
 
     def _connect_single_cell(self, cell):
-        i, j = cell.coords
+        i, j = cell.coordinate
         directions = [
             (-1, -1),
             (-1, 0),
