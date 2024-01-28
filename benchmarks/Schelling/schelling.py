@@ -1,7 +1,7 @@
 
 
 from mesa import Model
-from mesa.gridspace import CellAgent, Grid
+from mesa.experimental.gridspace import CellAgent, OrthogonalGrid
 from mesa.time import RandomActivation
 
 
@@ -23,19 +23,17 @@ class SchellingAgent(CellAgent):
         self.cell = cell
         self.type = agent_type
         self.radius = radius
-        # self.get_neighborhood = create_neighborhood_getter(radius)
 
     # @profile
     def step(self):
         similar = 0
-        for neighbor in self.cell.get_neighborhood(radius=self.radius).agents:
+        for neighbor in self.cell.neighborhood(radius=self.radius).agents:
             if neighbor.type == self.type:
                 similar += 1
 
         # If unhappy, move:
         if similar < self.model.homophily:
-            # self.model.grid.move_to_empty(self)
-            self.model.grid.move_to_empty(self)
+            self.move_to(self.model.grid.select_random_empty_cell())
         else:
             self.model.happy += 1
 
@@ -56,7 +54,7 @@ class Schelling(Model):
         self.radius = radius
 
         self.schedule = RandomActivation(self)
-        self.grid = Grid(width, height, torus=True)
+        self.grid = OrthogonalGrid(width, height, torus=True)
 
         self.happy = 0
 
@@ -64,7 +62,7 @@ class Schelling(Model):
             if self.random.random() < self.density:
                 agent_type = 1 if self.random.random() < self.minority_pc else 0
                 agent = SchellingAgent(self.next_id(), self, agent_type, cell, radius)
-                self.grid.move_agent(agent, cell)
+                agent.move_to(cell)
                 self.schedule.add(agent)
 
         self.running = True

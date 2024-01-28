@@ -46,7 +46,7 @@ class Agent:
         """
         self.unique_id = unique_id
         self.model = model
-        self.cell: Cell | None = None
+        self.pos = None
 
         # register agent
         try:
@@ -62,10 +62,6 @@ class Agent:
                 FutureWarning,
                 stacklevel=2,
             )
-
-    @property
-    def pos(self):
-        return self.cell.coords
 
     def remove(self) -> None:
         """Remove and delete the agent from the model."""
@@ -264,6 +260,7 @@ class AgentSet(MutableSet, Sequence):
             getattr(agent, method_name)(*args, **kwargs)
             for agentref in self._agents.keyrefs()
             if (agent := agentref()) is not None
+        ]
 
         return res if return_results else self
 
