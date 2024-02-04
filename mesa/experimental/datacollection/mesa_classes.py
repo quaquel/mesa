@@ -1,8 +1,18 @@
 from typing import Any
 
+import itertools
+
 from ...agent import Agent, AgentSet
 from ...model import Model
 from .pubsub import EventProducer, Events
+
+class UpdatedAgentSet(AgentSet):
+
+    def get(self, attr_names: str | list[str]) -> list[Any]:
+        if isinstance(attr_names, str):
+            attr_names = [attr_names]
+        a = [[getattr(agent, attr_name) for attr_name in attr_names] for agent in self._agents]
+        return a
 
 
 class ObservableModel(Model):
@@ -25,6 +35,14 @@ class ObservableModel(Model):
     def get_agents_of_type(self, agenttype: type[Agent]) -> AgentSet:
         """Retrieves an AgentSet containing all agents of the specified type."""
         return UpdatedAgentSet(self.agents_[agenttype].keys(), self)
+
+    @property
+    def agents(self) -> AgentSet:
+        if hasattr(self, "_agents"):
+            return self._agents
+        else:
+            all_agents = itertools.chain.from_iterable(self.agents_.values())
+            return UpdatedAgentSet(all_agents, self)
 
     def subscribe(self, event: str, event_handler: callable):
         self.event_producer.subscribe(event, event_handler)
@@ -62,13 +80,7 @@ class ObservableAgent(Agent):
         self.event_producer.unsubscribe(event, event_handler)
 
 
-class UpdatedAgentSet(AgentSet):
 
-    def get(self, attr_names: str | list[str]) -> list[Any]:
-        if isinstance(attr_names, str):
-            attr_names = [attr_names]
-        a = [[getattr(agent, attr_name) for attr_name in attr_names] for agent in self._agents]
-        return a
 
 
 
