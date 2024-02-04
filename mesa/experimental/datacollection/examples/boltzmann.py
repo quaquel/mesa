@@ -95,7 +95,7 @@ if __name__ == '__main__':
 
     observer = AgentSetObserver(model.agents, Events.STATE_CHANGE, handler)
 
-    datacollector = DataCollector()
+    datacollector = DataCollector(model)
     datacollector.add_collector(AgentSetCollector("wealth", model.agents, "wealth"))
 
 
