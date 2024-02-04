@@ -10,6 +10,10 @@ class ObservableModel(Model):
         super().__init__(*args, **kwargs)
         self.event_producer = EventProducer(self)
 
+    @property
+    def time(self):
+        return self._time
+
     def add_agent(self, agent:Agent) -> None:
         self.agents_[type(agent)][agent] = None
         self.event_producer.fire_event(Events.AGENT_ADDED, agent)
