@@ -1,14 +1,11 @@
 import math
 
-from mesa import Agent, Model
 from mesa.time import RandomActivation
 from mesa.space import SingleGrid
-from mesa.datacollection import DataCollector
 
 from mesa.experimental.datacollection.mesa_classes import ObservableModel, ObservableAgent
 from mesa.experimental.datacollection.pubsub import Events, ObservableNumber
 from mesa.experimental.datacollection.collectors import DataCollector, collect_from
-from mesa.experimental.datacollection.pubsub import AgentSetObserver
 
 
 class EpsteinAgent(ObservableAgent):
@@ -263,32 +260,6 @@ class EpsteinCivilViolence(ObservableModel):
         if self.iteration > self.max_iters:
             self.running = False
 
-    @staticmethod
-    def count_type_citizens(model, condition, exclude_jailed=True):
-        """
-        Helper method to count agents by Quiescent/Active.
-        """
-        agents = model.get_agents_of_type(Citizen)
-        if exclude_jailed:
-            agents.select(lambda a: a.jail_sentence > 0, inplace=True)
-        agents.select(lambda a: condition == a.condition, inplace=True)
-        return len(agents)
-
-    @staticmethod
-    def count_jailed(model):
-        """
-        Helper method to count jailed agents.
-        """
-        agents = model.get_agents_of_type(Citizen).select(lambda a: a.jail_sentence > 0)
-        return len(agents)
-
-    @staticmethod
-    def count_cops(model):
-        """
-        Helper method to count jailed agents.
-        """
-        return len(model.get_agents_of_type(Cop))
-
 
 if __name__ == '__main__':
     model = EpsteinCivilViolence()
@@ -296,7 +267,7 @@ if __name__ == '__main__':
     citizens = model.get_agents_of_type(Citizen)
     cops = model.get_agents_of_type(Citizen)
 
-    dc = DataCollector([
+    dc = DataCollector(model, [
         collect_from("n_quiescent", citizens, "condition",
                      lambda d: len([e for e in d if e["condition"] == "Quiescent"])),
         collect_from("n_active", cops, "condition",
