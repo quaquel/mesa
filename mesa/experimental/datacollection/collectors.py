@@ -4,10 +4,11 @@ import itertools
 import pandas as pd
 
 from mesa.agent import AgentSet
+from mesa import Model
 
 
 class BaseCollector:
-    def __init__(self, name:str, obj: Any, attributes: str|List[str]=None, callable: Callable=None, column_names: List[str]=None):
+    def __init__(self, name:str, obj: Any, attributes: str|List[str]=None, callable: Callable=None):
         """
 
         Args
@@ -15,10 +16,14 @@ class BaseCollector:
         obj : object
         attributes :
         callable : callable
-        column_names : list of column names, optional, defaults to attributes
+
+        Note::
+        if a callable is passed, it is assumed that there will only be a single return value
 
         """
         super().__init__()
+        if attributes is None:
+            attributes = [name,]
 
         if isinstance(attributes, str):
             attributes = [attributes,]
@@ -27,7 +32,6 @@ class BaseCollector:
         self.obj = obj
         self.attributes = attributes
         self.callable = callable
-        self.column_names = column_names
         self.data_over_time = {}
 
     def collect(self, time):
@@ -54,9 +58,7 @@ class BaseCollector:
         # or name, or even something else if callable does funky stuff
         # so we need meaningful defaults and a way to override them
 
-        if self.column_names is not None:
-            columns = self.column_names
-        elif self.callable is not None:
+        if self.callable is not None:
             columns = [self.name]
         else:
             columns = self.attributes
@@ -65,8 +67,8 @@ class BaseCollector:
 
 
 class AgentSetCollector(BaseCollector):
-    def __init__(self, name, obj, attributes=None, callable=None, column_names=None):
-        super().__init__(name, obj, attributes, callable, column_names)
+    def __init__(self, name, obj, attributes=None, callable=None):
+        super().__init__(name, obj, attributes=attributes, callable=callable)
         self.attributes.append("unique_id")
 
     def collect(self, time):
@@ -163,9 +165,51 @@ class DataCollector:
             collector.collect(time)
 
 
+def collect(name:str, obj:Any, attributes: str|List[str]=None, callable: Callable=None):
+    """
 
-def collect_from(name, object, attributes, callable=None):
-    if isinstance(object, AgentSet):
-        return AgentSetCollector(name, object, attributes, callable)
+    Args
+        name : name of the collector
+        obj : object form which to collect information
+        attributes : attributes to collect, option. If not provided, attributes defaults to name
+        callable : callable to apply to collected data.
+
+    FIXME:: what about callable to object directly? or simply not allow for it and solve this
+    FIXME:: through measures?
+
+    """
+
+    if isinstance(obj, AgentSet):
+        return AgentSetCollector(name, obj, attributes, callable)
     else:
-        return BaseCollector(name, object, attributes, callable)
+        return BaseCollector(name, obj, attributes, callable)
+
+
+
+
+class Measure:
+    # FIXME:: do we want AgentSet based measures?
+    # FIXME:: can we play some property trick to enable attribute retrieval
+    # FIXME:: doing so would turn measure into a descriptor
+    # FIXME:: what about callable vs. attribute based Measures?
+
+    def __init__(self, model:Model, obj: Any, callable: Callable):
+        super().__init__()
+        self.obj = obj
+        self.callable = callable
+        self.model = model
+        self._update_step = -1
+        self._cached_value = None
+
+    def get_value(self, force_update: bool = False):
+        """
+
+        Args:
+            force_update (bool): force recalculation of measure.
+
+        """
+
+        if force_update or (self.model.step != self._update_step):
+            self._cached_value = self.callable(self.obj)
+        return self._cached_value
+
