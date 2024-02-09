@@ -4,8 +4,7 @@ from mesa.time import RandomActivation
 from mesa.space import SingleGrid
 
 from mesa.experimental.datacollection.mesa_classes import ObservableModel, ObservableAgent
-from mesa.experimental.datacollection.pubsub import Events, ObservableNumber
-from mesa.experimental.datacollection.collectors import DataCollector, collect_from
+from mesa.experimental.datacollection.collectors import DataCollector, collect, Measure
 
 
 class EpsteinAgent(ObservableAgent):
@@ -224,9 +223,14 @@ class EpsteinCivilViolence(ObservableModel):
         self.arrest_prob_constant = arrest_prob_constant
         self.movement = movement
         self.max_iters = max_iters
-        self.iteration = 0
         self.schedule = RandomActivation(self)
         self.grid = SingleGrid(width, height, torus=True)
+
+
+        citizens = m.get_agents_of_type(Citizen)
+
+        self.quiescent = Measure(citizens, lambda agent_set:
+                                 agent_set.select(lambda agent: agent.condition == "quiescent"))
 
         if self.cop_density + self.citizen_density > 1:
             raise ValueError("Cop density + citizen density must be less than 1")
@@ -256,8 +260,7 @@ class EpsteinCivilViolence(ObservableModel):
         """
         self.schedule.step()
         # collect data
-        self.iteration += 1
-        if self.iteration > self.max_iters:
+        if self._steps > self.max_iters:
             self.running = False
 
 
@@ -265,16 +268,16 @@ if __name__ == '__main__':
     model = EpsteinCivilViolence()
 
     citizens = model.get_agents_of_type(Citizen)
-    cops = model.get_agents_of_type(Citizen)
+    cops = model.get_agents_of_type(Cop)
 
     dc = DataCollector(model, [
-        collect_from("n_quiescent", citizens, "condition",
-                     lambda d: len([e for e in d if e["condition"] == "Quiescent"])),
-        collect_from("n_active", cops, "condition",
-                     lambda d: len([e for e in d if e["condition"] == "Active"])),
-        collect_from("jailed", citizens, "jail_sentence",
-                     lambda d: len([e for e in d if e["jail_sentence"] > 0])),
-        collect_from("data", citizens, ["jail_sentence", "arrest_probability"])
+        collect("n_quiescent", citizens, attributes="condition",
+                     callable=lambda d: len([e for e in d if e["condition"] == "Quiescent"])),
+        collect("n_active", citizens, attributes="condition",
+                     callable=lambda d: len([e for e in d if e["condition"] == "Active"])),
+        collect("jail_sentence", citizens,
+                     callable=lambda d: len([e for e in d if e["jail_sentence"] > 0])),
+        collect("data", citizens, ["jail_sentence", "arrest_probability"])
     ])
 
     dc.collect_all()
@@ -282,5 +285,6 @@ if __name__ == '__main__':
         model.step()
         dc.collect_all()
 
+    print(dc.jail_sentence.to_dataframe().head())
     print(dc.n_quiescent.to_dataframe().head())
     print(dc.data.to_dataframe().head())

@@ -5,7 +5,7 @@ from mesa.time import RandomActivation
 
 from mesa.experimental.datacollection.mesa_classes import ObservableModel, ObservableAgent
 from mesa.experimental.datacollection.pubsub import Events, ObservableNumber
-from mesa.experimental.datacollection.collectors import BaseCollector, AgentSetCollector, DataCollector
+from mesa.experimental.datacollection.collectors import collect, DataCollector
 from mesa.experimental.datacollection.pubsub import AgentSetObserver
 
 def compute_gini(model):
@@ -93,10 +93,7 @@ def handler(subject, state):
 if __name__ == '__main__':
     model = BoltzmannWealthModel()
 
-    observer = AgentSetObserver(model.agents, Events.STATE_CHANGE, handler)
-
-    datacollector = DataCollector(model)
-    datacollector.add_collector(AgentSetCollector("wealth", model.agents, "wealth"))
+    datacollector = DataCollector(model, [collect("wealth", model.agents)])
 
 
     for _ in range(10):
