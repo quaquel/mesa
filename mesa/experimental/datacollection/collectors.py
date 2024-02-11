@@ -8,7 +8,7 @@ from mesa import Model
 
 
 class BaseCollector:
-    def __init__(self, name:str, obj: Any, attributes: str|List[str]=None, callable: Callable=None):
+    def __init__(self, name:str, obj: Any, attributes: str|List[str]=None, fn: Callable=None):
         """
 
         Args
@@ -31,7 +31,7 @@ class BaseCollector:
         self.name = name
         self.obj = obj
         self.attributes = attributes
-        self.callable = callable
+        self.callable = fn
         self.data_over_time = {}
 
     def collect(self, time):
@@ -67,8 +67,8 @@ class BaseCollector:
 
 
 class AgentSetCollector(BaseCollector):
-    def __init__(self, name, obj, attributes=None, callable=None):
-        super().__init__(name, obj, attributes=attributes, callable=callable)
+    def __init__(self, name, obj, attributes=None, fn=None):
+        super().__init__(name, obj, attributes=attributes, fn=fn)
         self.attributes.append("unique_id")
 
     def collect(self, time):
@@ -165,14 +165,14 @@ class DataCollector:
             collector.collect(time)
 
 
-def collect(name:str, obj:Any, attributes: str|List[str]=None, callable: Callable=None):
+def collect(name:str, obj:Any, attributes: str|List[str]=None, fn: Callable=None):
     """
 
     Args
         name : name of the collector
         obj : object form which to collect information
         attributes : attributes to collect, option. If not provided, attributes defaults to name
-        callable : callable to apply to collected data.
+        fn : callable to apply to collected data.
 
     FIXME:: what about callable to object directly? or simply not allow for it and solve this
     FIXME:: through measures?
@@ -180,9 +180,9 @@ def collect(name:str, obj:Any, attributes: str|List[str]=None, callable: Callabl
     """
 
     if isinstance(obj, AgentSet):
-        return AgentSetCollector(name, obj, attributes, callable)
+        return AgentSetCollector(name, obj, attributes, fn)
     else:
-        return BaseCollector(name, obj, attributes, callable)
+        return BaseCollector(name, obj, attributes, fn)
 
 
 
@@ -193,13 +193,13 @@ class Measure:
     # FIXME:: doing so would turn measure into a descriptor
     # FIXME:: what about callable vs. attribute based Measures?
 
-    def __init__(self, model:Model, obj: Any, callable: Callable):
+    def __init__(self, model, obj: Any, callable: Callable):
         super().__init__()
         self.obj = obj
         self.callable = callable
-        self.model = model
         self._update_step = -1
         self._cached_value = None
+        self.model = model
 
     def get_value(self, force_update: bool = False):
         """
@@ -212,4 +212,21 @@ class Measure:
         if force_update or (self.model.step != self._update_step):
             self._cached_value = self.callable(self.obj)
         return self._cached_value
+
+
+
+class MeasureDescriptor:
+
+    def some_test_method(self, obj, *args, **kwargs):
+        print("blaat")
+
+    def __set_name__(self, owner, name):
+        self.public_name = name
+        self.private_name = "_" + name
+    def __get__(self, obj, owner):
+        return getattr(obj, self.private_name).get_value()
+
+    def __set__(self, obj, value):
+        setattr(obj, self.private_name, value)
+
 

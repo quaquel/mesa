@@ -16,6 +16,7 @@ class UpdatedAgentSet(AgentSet):
 
 
 class ObservableModel(Model):
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         self.event_producer = EventProducer(self)
