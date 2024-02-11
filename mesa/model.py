@@ -18,7 +18,17 @@ from mesa.agent import Agent, AgentSet
 from mesa.datacollection import DataCollector
 
 
-class Model:
+class MetaClass(type):
+    def __new__(cls, name, bases, attrs):
+        return super().__new__(cls, name, bases, attrs)
+
+    def __init__(self, name, bases, attrs):
+        # perform any additional initialization here...
+        super().__init__(name, bases, attrs)
+        print("blaat")
+
+
+class Model(metaclass=MetaClass):
     """Base class for models in the Mesa ABM library.
 
     This class serves as a foundational structure for creating agent-based models.

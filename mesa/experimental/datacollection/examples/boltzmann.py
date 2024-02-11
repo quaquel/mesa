@@ -5,15 +5,16 @@ from mesa.time import RandomActivation
 
 from mesa.experimental.datacollection.mesa_classes import ObservableModel, ObservableAgent
 from mesa.experimental.datacollection.pubsub import Events, ObservableNumber
-from mesa.experimental.datacollection.collectors import collect, DataCollector
+from mesa.experimental.datacollection.collectors import collect, DataCollector, Measure, MeasureDescriptor
 from mesa.experimental.datacollection.pubsub import AgentSetObserver
 
-def compute_gini(model):
-    agent_wealths = [agent.wealth for agent in model.schedule.agents]
+def compute_gini(agents):
+    agent_wealths = [agent.wealth for agent in agents]
     x = sorted(agent_wealths)
     N = model.num_agents
     B = sum(xi * (N - i) for i, xi in enumerate(x)) / (N * sum(x))
     return 1 + (1 / N) - 2 * B
+
 
 
 class BoltzmannWealthModel(ObservableModel):
@@ -24,14 +25,13 @@ class BoltzmannWealthModel(ObservableModel):
     highly skewed distribution of wealth.
     """
 
+    # gini = MeasureDescriptor()
+
     def __init__(self, N=100, width=10, height=10):
         super().__init__()
         self.num_agents = N
         self.grid = MultiGrid(width, height, True)
         self.schedule = RandomActivation(self)
-        # self.datacollector = DataCollector(
-        #     model_reporters={"Gini": compute_gini}, agent_reporters={"Wealth": "wealth"}
-        # )
 
         # Create agents
         for i in range(self.num_agents):
@@ -43,21 +43,16 @@ class BoltzmannWealthModel(ObservableModel):
             self.grid.place_agent(a, (x, y))
 
         self.running = True
-        # self.datacollector.collect(self)
+
+        self.gini.some_test_method()
+        self.gini = Measure(self, self.agents, compute_gini)
 
     def step(self):
         self.schedule.step()
-        # collect data
-        # self.datacollector.collect(self)
-
-    def run_model(self, n):
-        for i in range(n):
-            self.step()
 
 
 class MoneyAgent(ObservableAgent):
     """An agent with fixed initial wealth."""
-    wealth = ObservableNumber()
 
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
@@ -90,10 +85,15 @@ def handler(subject, state):
     if state == "wealth":
         return getattr(subject, state)
 
+
+def some_func(obj):
+    return obj.get_value()
+
 if __name__ == '__main__':
     model = BoltzmannWealthModel()
 
-    datacollector = DataCollector(model, [collect("wealth", model.agents)])
+    datacollector = DataCollector(model, [collect("wealth", model.agents),
+                                          collect("gini", model)])
 
 
     for _ in range(10):
@@ -101,3 +101,4 @@ if __name__ == '__main__':
         datacollector.collect_all()
 
     print(datacollector.wealth.to_dataframe().head())
+    print(datacollector.gini.to_dataframe().head())
