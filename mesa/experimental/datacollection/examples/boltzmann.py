@@ -4,7 +4,7 @@ from mesa.space import MultiGrid
 from mesa.time import RandomActivation
 
 from mesa.experimental.datacollection.mesa_classes import ObservableModel, ObservableAgent
-from mesa.experimental.datacollection.pubsub import Events, ObservableNumber
+from mesa.experimental.datacollection.pubsub import MessageType, ObservableState
 from mesa.experimental.datacollection.collectors import collect, DataCollector, Measure, MeasureDescriptor
 from mesa.experimental.datacollection.pubsub import AgentSetObserver
 
@@ -44,7 +44,6 @@ class BoltzmannWealthModel(ObservableModel):
 
         self.running = True
 
-        self.gini.some_test_method()
         self.gini = Measure(self, self.agents, compute_gini)
 
     def step(self):

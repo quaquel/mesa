@@ -1,16 +1,25 @@
 import math
+import enum
 
 from mesa.time import RandomActivation
 from mesa.space import SingleGrid
 
 from mesa.experimental.datacollection.mesa_classes import ObservableModel, ObservableAgent
 from mesa.experimental.datacollection.collectors import DataCollector, collect, Measure
+from mesa.experimental.datacollection.mesa_classes import ConditionalAgentSet
+from mesa.experimental.datacollection.pubsub import ObservableState
 
 
 class EpsteinAgent(ObservableAgent):
     def __init__(self, unique_id, model, vision):
         super().__init__(unique_id, model)
         self.vision = vision
+
+
+class CitizenState(enum.StrEnum):
+    ACTIVE = "active"
+    QUIESCENT = "quiescent"
+    JAILED = "jailed"
 
 
 class Citizen(EpsteinAgent):
@@ -37,6 +46,7 @@ class Citizen(EpsteinAgent):
         arrest_probability: agent's assessment of arrest probability, given
             rebellion
     """
+    condition = ObservableState()
 
     def __init__(
             self,
@@ -68,7 +78,7 @@ class Citizen(EpsteinAgent):
         self.regime_legitimacy = regime_legitimacy
         self.risk_aversion = risk_aversion
         self.threshold = threshold
-        self.condition = "Quiescent"
+        self.condition = CitizenState.QUIESCENT
         self.jail_sentence = 0
         self.grievance = self.hardship * (1 - self.regime_legitimacy)
         self.arrest_probability = None
@@ -77,16 +87,20 @@ class Citizen(EpsteinAgent):
         """
         Decide whether to activate, then move if applicable.
         """
-        if self.jail_sentence:
+        if self.condition == CitizenState.JAILED:
             self.jail_sentence -= 1
             return  # no other changes or movements if agent is in jail.
+
         self.update_neighbors()
         self.update_estimated_arrest_probability()
+
         net_risk = self.risk_aversion * self.arrest_probability
-        if self.grievance - net_risk > self.threshold:
-            self.condition = "Active"
-        else:
-            self.condition = "Quiescent"
+        if (self.grievance - net_risk > self.threshold) and (self.condition != CitizenState.ACTIVE):
+            self.condition = CitizenState.ACTIVE
+        elif self.condition == CitizenState.ACTIVE:
+            self.condition = CitizenState.QUIESCENT
+        # else, agent is quiescent and stays that way
+
         if self.model.movement and self.empty_neighbors:
             new_pos = self.random.choice(self.empty_neighbors)
             self.model.grid.move_agent(self, new_pos)
@@ -113,13 +127,16 @@ class Citizen(EpsteinAgent):
         for c in self.neighbors:
             if (
                     isinstance(c, Citizen)
-                    and c.condition == "Active"
-                    and c.jail_sentence == 0
+                    and c.condition == CitizenState.ACTIVE
             ):
                 actives_in_vision += 1
         self.arrest_probability = 1 - math.exp(
             -1 * self.model.arrest_prob_constant * (cops_in_vision / actives_in_vision)
         )
+
+    def sent_to_jail(self, sentence):
+        self.condition = CitizenState.JAILED
+        self.jail_sentence = sentence
 
 
 class Cop(EpsteinAgent):
@@ -145,14 +162,12 @@ class Cop(EpsteinAgent):
             if (
                     isinstance(agent, Citizen)
                     and agent.condition == "Active"
-                    and agent.jail_sentence == 0
             ):
                 active_neighbors.append(agent)
         if active_neighbors:
             arrestee = self.random.choice(active_neighbors)
             sentence = self.random.randint(0, self.model.max_jail_term)
-            arrestee.jail_sentence = sentence
-            arrestee.condition = "Quiescent"
+            arrestee.sent_to_jail(sentence)
         if self.model.movement and self.empty_neighbors:
             new_pos = self.random.choice(self.empty_neighbors)
             self.model.grid.move_agent(self, new_pos)
@@ -226,12 +241,6 @@ class EpsteinCivilViolence(ObservableModel):
         self.schedule = RandomActivation(self)
         self.grid = SingleGrid(width, height, torus=True)
 
-
-        citizens = m.get_agents_of_type(Citizen)
-
-        self.quiescent = Measure(citizens, lambda agent_set:
-                                 agent_set.select(lambda agent: agent.condition == "quiescent"))
-
         if self.cop_density + self.citizen_density > 1:
             raise ValueError("Cop density + citizen density must be less than 1")
         for contents, pos in self.grid.coord_iter():
@@ -252,6 +261,22 @@ class EpsteinCivilViolence(ObservableModel):
             self.grid.place_agent(agent, pos)
             self.schedule.add(agent)
 
+        # static groups
+        citizens = self.get_agents_of_type(Citizen)
+        cops = self.get_agents_of_type(Cop)
+
+        # conditional groups
+        self.quiescent = ConditionalAgentSet(citizens, self,
+                                             condition=lambda agent: agent.condition == CitizenState.QUIESCENT)
+        self.active = ConditionalAgentSet(citizens, self,
+                                          condition=lambda agent: agent.condition == CitizenState.ACTIVE)
+        self.jailed = ConditionalAgentSet(citizens, self, condition=lambda agent: agent.jail_sentence > 0)
+
+        # measures
+        self.n_quiescent = Measure(self, self.quiescent, lambda obj: len(obj))
+        self.n_active = Measure(self, self.active, lambda obj: len(obj))
+        self.n_jailed = Measure(self, self.jailed, lambda obj: len(obj))
+
         self.running = True
 
     def step(self):
@@ -265,26 +290,17 @@ class EpsteinCivilViolence(ObservableModel):
 
 
 if __name__ == '__main__':
-    model = EpsteinCivilViolence()
-
-    citizens = model.get_agents_of_type(Citizen)
-    cops = model.get_agents_of_type(Cop)
+    model = EpsteinCivilViolence(seed=15)
 
     dc = DataCollector(model, [
-        collect("n_quiescent", citizens, attributes="condition",
-                     callable=lambda d: len([e for e in d if e["condition"] == "Quiescent"])),
-        collect("n_active", citizens, attributes="condition",
-                     callable=lambda d: len([e for e in d if e["condition"] == "Active"])),
-        collect("jail_sentence", citizens,
-                     callable=lambda d: len([e for e in d if e["jail_sentence"] > 0])),
-        collect("data", citizens, ["jail_sentence", "arrest_probability"])
+        collect("model_data", model, attributes=["n_quiescent", "n_active", "n_jailed"]),
+        collect("jail_sentence", model.jailed),
+        collect("citizen_data", model.get_agents_of_type(Citizen), ["jail_sentence", "arrest_probability"])
     ])
 
     dc.collect_all()
-    for _ in range(10):
+    for _ in range(50):
         model.step()
         dc.collect_all()
 
-    print(dc.jail_sentence.to_dataframe().head())
-    print(dc.n_quiescent.to_dataframe().head())
-    print(dc.data.to_dataframe().head())
+    print(dc.data.to_dataframe())

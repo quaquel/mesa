@@ -193,10 +193,10 @@ class Measure:
     # FIXME:: doing so would turn measure into a descriptor
     # FIXME:: what about callable vs. attribute based Measures?
 
-    def __init__(self, model, obj: Any, callable: Callable):
+    def __init__(self, model, obj: Any, fn: Callable):
         super().__init__()
         self.obj = obj
-        self.callable = callable
+        self.fn = fn
         self._update_step = -1
         self._cached_value = None
         self.model = model
@@ -210,7 +210,7 @@ class Measure:
         """
 
         if force_update or (self.model.step != self._update_step):
-            self._cached_value = self.callable(self.obj)
+            self._cached_value = self.fn(self.obj)
         return self._cached_value
 
 
@@ -218,7 +218,7 @@ class Measure:
 class MeasureDescriptor:
 
     def some_test_method(self, obj, *args, **kwargs):
-        print("blaat")
+        print(obj)
 
     def __set_name__(self, owner, name):
         self.public_name = name
