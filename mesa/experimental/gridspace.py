@@ -152,7 +152,7 @@ class CellCollection:
         return itertools.chain.from_iterable(self._cells.values())
 
     def select_random_cell(self) -> Cell:
-        return random.choice(list(self.cells.keys()))
+        return random.choice(list(self.cells))
 
     def select_random_agent(self) -> Agent:
         return random.choice(list(self.agents))
