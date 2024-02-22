@@ -8,26 +8,8 @@ from .pubsub import MessageProducer, MessageType
 from .collectors import Measure, MeasureDescriptor
 
 
-class UpdatedAgentSet(AgentSet):
 
-    def get(self, attr_names: str | List[str]) -> list[Any]:
-        """
-        Retrieve the specified attribute(s) from each agent in the AgentSet.
-
-        Args:
-            attr_names (str | List[str]): The name(s) of the attribute(s) to retrieve from each agent.
-
-        Returns:
-            list[Any]: A list of attribute values for each agent in the set.
-        """
-
-        if isinstance(attr_names, str):
-            return [getattr(agent, attr_names) for agent in self._agents]
-        else:
-            return [[getattr(agent, attr_name) for attr_name in attr_names] for agent in self._agents]
-
-
-class ConditionalAgentSet(UpdatedAgentSet):
+class ConditionalAgentSet(AgentSet):
     """This is a dynamic agent set where membership depends on a specified condition
 
     For this agent set, memberships depends on a user specified condition, and it can change over the course of the
@@ -41,8 +23,10 @@ class ConditionalAgentSet(UpdatedAgentSet):
 
     """
 
-    def __init__(self, agents: Iterable[Agent] | None, model: Model, condition: Callable[[Agent], bool]) -> None:
+    def __init__(self, agents: Iterable[Agent] | None, model: Model, observable_state:str, condition: Callable[[Any], bool]) -> None:
         """
+        FIXME:: ONLY SIMPLE CONDITIONS ARE CURRENTLY SUPPORTED
+
 
         Args:
             agents (Iterable[Agent]): An iterable of agents. These form the basis of the agents in the set
@@ -54,41 +38,43 @@ class ConditionalAgentSet(UpdatedAgentSet):
         """
 
         super().__init__({}, model)
-        self._condition = condition
+        self._condition: Callable[[Any], bool] = condition
+        self.observable_state: str = observable_state
+        self._message_type: str = f"{observable_state.upper()}_CHANGE"
 
         if agents is None:
             agents = model.agents
-            model.subscribe(model.AGENT_ADDED.name)
+            model.subscribe(model.AGENT_ADDED)
 
         for agent in agents:
             self.add_permanently(agent)
 
     def add_permanently(self, agent: Agent) -> None:
-        agent.subscribe(agent.STATE_CHANGE.name, self.state_change_handler)
-        self._apply_condition(agent)
+        agent.subscribe(getattr(agent, self._message_type), self.state_change_handler)
+        self._apply_condition(agent, getattr(agent, self.observable_state))
+
     def remove_permanently(self, agent):
         self.remove(agent)
-        agent.unsubscribe(agent.STATE_CHANGE.name, self.state_change_handler)
+        agent.unsubscribe(getattr(agent, self._message_type), self.state_change_handler)
 
-    def _apply_condition(self, agent: Agent):
-        if self._condition(agent):
+    def _apply_condition(self, agent, value) -> None:
+        if self._condition(value):
             self.add(agent)
         else:
             self.discard(agent)
 
     def state_change_handler(self, message):
-        self._apply_condition(message.sender)
+       self._apply_condition(message.sender, message.value)
 
     def agent_added_handler(self, message):
         agent = message.agent
-        agent.subscribe(agent.STATE_CHANGE)
-        self._apply_condition(agent)
+        agent.subscribe(getattr(agent, self._message_type), self.state_change_handler)
+        self._apply_condition(agent, getattr(agent, self.name))
 
 
 class ObservableModel(Model):
     AGENT_ADDED = MessageType("agent")
     AGENT_REMOVED = MessageType("agent")
-    STATE_CHANGED = MessageType("state")
 
     def __setattr__(self, name, value):
         if isinstance(value, Measure) and not name.startswith("_"):
@@ -118,7 +104,7 @@ class ObservableModel(Model):
 
     def get_agents_of_type(self, agenttype: type[Agent]) -> AgentSet:
         """Retrieves an AgentSet containing all agents of the specified type."""
-        return UpdatedAgentSet(self.agents_[agenttype].keys(), self)
+        return AgentSet(self.agents_[agenttype].keys(), self)
 
     @property
     def agents(self) -> AgentSet:
@@ -126,7 +112,7 @@ class ObservableModel(Model):
             return self._agents
         else:
             all_agents = itertools.chain.from_iterable(self.agents_.values())
-            return UpdatedAgentSet(all_agents, self)
+            return AgentSet(all_agents, self)
 
     def subscribe(self, event: str, event_handler: callable):
         self.event_producer.subscribe(event, event_handler)
@@ -137,7 +123,6 @@ class ObservableModel(Model):
 
 
 class ObservableAgent(Agent):
-    STATE_CHANGE = MessageType("state")
 
     def __init__(self, unique_id: int, model: ObservableModel) -> None:
         """
