@@ -1,5 +1,6 @@
 import math
 import enum
+import time
 
 from mesa.time import RandomActivation
 from mesa.space import SingleGrid
@@ -47,6 +48,7 @@ class Citizen(EpsteinAgent):
             rebellion
     """
     condition = ObservableState()
+    jail_sentence = ObservableState()
 
     def __init__(
             self,
@@ -266,11 +268,12 @@ class EpsteinCivilViolence(ObservableModel):
         cops = self.get_agents_of_type(Cop)
 
         # conditional groups
-        self.quiescent = ConditionalAgentSet(citizens, self,
-                                             condition=lambda agent: agent.condition == CitizenState.QUIESCENT)
-        self.active = ConditionalAgentSet(citizens, self,
-                                          condition=lambda agent: agent.condition == CitizenState.ACTIVE)
-        self.jailed = ConditionalAgentSet(citizens, self, condition=lambda agent: agent.jail_sentence > 0)
+        self.quiescent = ConditionalAgentSet(citizens, self, "condition",
+                                             condition=lambda condition: condition == CitizenState.QUIESCENT)
+        self.active = ConditionalAgentSet(citizens, self, "condition",
+                                          condition=lambda condition: condition == CitizenState.ACTIVE)
+        self.jailed = ConditionalAgentSet(citizens, self, "jail_sentence",
+                                          condition=lambda jail_sentence: jail_sentence > 0)
 
         # measures
         self.n_quiescent = Measure(self, self.quiescent, lambda obj: len(obj))
@@ -299,8 +302,11 @@ if __name__ == '__main__':
     ])
 
     dc.collect_all()
+
+    start_time = time.perf_counter()
     for _ in range(50):
         model.step()
         dc.collect_all()
+    print(f"Elapsed time: {time.perf_counter()-start_time} seconds")
 
-    print(dc.data.to_dataframe())
+    # print(dc.model_data.to_dataframe())
