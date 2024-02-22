@@ -1,5 +1,6 @@
 import itertools
 import random
+from random import Random
 from collections.abc import Iterable
 from functools import cache, cached_property
 from random import Random
@@ -50,15 +51,16 @@ class Cell:
         "agents",
         "capacity",
         "properties",
+        "random"
     ]
 
-    def __init__(self, coordinate, owner, capacity: int | None = 1) -> None:
+    def __init__(self, coordinate, capacity: int | None = 1, random: Random | None = None,) -> None:
         self.coordinate = coordinate
         self._connections: list[Cell] = []  # TODO: change to CellCollection?
         self.agents: dict[Agent, None] = {}  # TODO:: change to AgentSet or weakrefs? (neither is very performant, )
         self.capacity = capacity
         self.properties: dict[str, object] = {}
-        self.owner = owner
+        self.random = random if random is not None else Random()
 
     def connect(self, other) -> None:
         """Connects this cell to another cell."""
@@ -73,8 +75,6 @@ class Cell:
         if len(self.agents) >= self.capacity:
             # TODO:: Fixme should be the proper type of exception
             raise Exception("ERROR: Cell is full")
-        if len(self.agents) == 0:
-            self.owner._empties.pop(self.coordinate, None)
         self.agents[agent] = None
         agent.cell = self
 
@@ -82,8 +82,6 @@ class Cell:
         """Removes an agent from the cell."""
         self.agents.pop(agent, None)
         agent.cell = None
-        if len(self.agents) == 0:
-            self.owner._empties[self.coordinate] = None
 
     @property
     def is_empty(self) -> bool:
@@ -101,7 +99,7 @@ class Cell:
     @cache
     def neighborhood(self, radius=1, include_center=False):
         return CellCollection(
-            self._neighborhood(radius=radius, include_center=include_center)
+            self._neighborhood(radius=radius, include_center=include_center), random=self.random
         )
 
     @cache
@@ -109,7 +107,7 @@ class Cell:
         # if radius == 0:
         #     return {self: self.agents}
         if radius < 1:
-            raise ValueError("radius must be larger than one")
+            raise ValueError("radius must be equal to or larger than one")
         if radius == 1:
             return {neighbor: neighbor.agents for neighbor in self._connections}
         else:
@@ -126,8 +124,9 @@ class Cell:
 
 class CellCollection:
 
-    def __init__(self, cells: dict[Cell, Iterable[Agent]]) -> None:
+    def __init__(self, cells: dict[Cell, Iterable[Agent]], random: Random | None = None,) -> None:
         self._cells = cells
+        self.random = random
 
     def __iter__(self):
         return iter(self._cells)
@@ -152,10 +151,10 @@ class CellCollection:
         return itertools.chain.from_iterable(self._cells.values())
 
     def select_random_cell(self) -> Cell:
-        return random.choice(list(self.cells))
+        return self.random.choice(list(self.cells))
 
     def select_random_agent(self) -> Agent:
-        return random.choice(list(self.agents))
+        return self.random.choice(list(self.agents))
 
     def select(self, filter_func: Optional[Callable[[Cell], bool]] = None, n=0):
         if filter_func is None and n == 0:
@@ -174,11 +173,11 @@ class CellCollection:
 
 
 class DiscreteSpace:
-    def __init__(self, capacity):
+    def __init__(self, capacity, random: Random | None = None):
         super().__init__()
         self.capacity = capacity
         self.cells: dict[Coordinate, Cell] = {}
-        self.random = Random()  # FIXME
+        self.random = random if random is not None else Random()
 
         self._empties = {}
         self.cutoff_empties = -1
@@ -214,38 +213,38 @@ class DiscreteSpace:
 
 class Grid(DiscreteSpace):
     def __init__(
-            self, width: int, height: int, torus: bool = False, capacity: int = 1
+            self, width: int, height: int, torus: bool = False, capacity: int = 1, random: Random | None = None
     ) -> None:
-        super().__init__(capacity)
+        super().__init__(capacity, random=random)
         self.torus = torus
         self.width = width
         self.height = height
 
     def select_random_empty_cell(self) -> Cell:
-        if not self.empties_initialized:
-            self._initialize_empties()
-
-        num_empty_cells = len(self._empties)
-        if num_empty_cells == 0:
-            raise Exception("ERROR: No empty cells")
-
-        # This method is based on Agents.jl's random_empty() implementation. See
-        # https://github.com/JuliaDynamics/Agents.jl/pull/541. For the discussion, see
-        # https://github.com/projectmesa/mesa/issues/1052 and
-        # https://github.com/projectmesa/mesa/pull/1565. The cutoff value provided
-        # is the break-even comparison with the time taken in the else branching point.
-        if num_empty_cells > self.cutoff_empties:
-            while True:
-                new_pos = (
-                    self.random.randrange(self.width),
-                    self.random.randrange(self.height),
-                )
-                cell = self.cells[new_pos]
-                if cell.is_empty:
-                    break
-        else:
-            coordinate = self.random.choice(list(self._empties))
-            cell = self.cells[coordinate]
+        # if not self.empties_initialized:
+        #     self._initialize_empties()
+        #
+        # num_empty_cells = len(self._empties)
+        # if num_empty_cells == 0:
+        #     raise Exception("ERROR: No empty cells")
+        #
+        # # This method is based on Agents.jl's random_empty() implementation. See
+        # # https://github.com/JuliaDynamics/Agents.jl/pull/541. For the discussion, see
+        # # https://github.com/projectmesa/mesa/issues/1052 and
+        # # https://github.com/projectmesa/mesa/pull/1565. The cutoff value provided
+        # # is the break-even comparison with the time taken in the else branching point.
+        # if num_empty_cells > self.cutoff_empties:
+        while True:
+            new_pos = (
+                self.random.randrange(self.width),
+                self.random.randrange(self.height),
+            )
+            cell = self.cells[new_pos]
+            if cell.is_empty:
+                break
+        # else:
+        #     coordinate = self.random.choice(list(self._empties))
+        #     cell = self.cells[coordinate]
 
         return cell
 
@@ -258,6 +257,7 @@ class OrthogonalGrid(Grid):
             torus: bool = False,
             moore: bool = True,
             capacity: int = 1,
+            random: Random | None = None
     ) -> None:
         """Orthogonal grid
 
@@ -270,10 +270,10 @@ class OrthogonalGrid(Grid):
 
 
         """
-        super().__init__(width, height, torus, capacity)
+        super().__init__(width, height, torus, capacity, random=random)
         self.moore = moore
         self.cells = {
-            (i, j): Cell((i, j), self, capacity)
+            (i, j): Cell((i, j), capacity, random=self.random)
             for j in range(width)
             for i in range(height)
         }
@@ -309,7 +309,7 @@ class OrthogonalGrid(Grid):
 
 class HexGrid(Grid):
     def __init__(
-            self, width: int, height: int, torus: bool = False, capacity=1
+            self, width: int, height: int, torus: bool = False, capacity=1, random: Random | None = None
     ) -> None:
         """Hexagonal Grid
 
@@ -320,9 +320,9 @@ class HexGrid(Grid):
             capacity (int): the number of agents that can simultaneously occupy a cell
 
         """
-        super().__init__(width, height, torus, capacity)
+        super().__init__(width, height, torus, capacity, random=random)
         self.cells = {
-            (i, j): Cell(i, j, self, capacity)
+            (i, j): Cell(i, j, capacity, random=self.random)
             for j in range(width)
             for i in range(height)
         }
@@ -357,7 +357,7 @@ class HexGrid(Grid):
 
 
 class NetworkGrid(DiscreteSpace):
-    def __init__(self, g: Any, capacity: int = 1) -> None:
+    def __init__(self, g: Any, capacity: int = 1,random: Random | None = None) -> None:
         """A Networked grid
 
         Args:
@@ -365,11 +365,11 @@ class NetworkGrid(DiscreteSpace):
             capacity (int) : the capacity of the cell
 
         """
-        super().__init__(capacity)
+        super().__init__(capacity, random=random)
         self.G = g
 
         for node_id in self.G.nodes:
-            self.cells[node_id] = Cell(node_id, self, capacity)
+            self.cells[node_id] = Cell(node_id, capacity, random=self.random)
 
         for cell in self.all_cells:
             self._connect_single_cell(cell)
@@ -380,8 +380,8 @@ class NetworkGrid(DiscreteSpace):
         ]
         cell.connect(neighbors)
 
-    def select_random_empty_cell(self) -> Cell:
-        if not self.empties_initialized:
-            self._initialize_empties()
-
-        return self.random.choice(self._empties)
+    # def select_random_empty_cell(self) -> Cell:
+    #     if not self.empties_initialized:
+    #         self._initialize_empties()
+    #
+    #     return self.random.choice(self._empties)
