@@ -7,7 +7,7 @@ from mesa.space import SingleGrid
 
 from mesa.experimental.datacollection.mesa_classes import ObservableModel, ObservableAgent
 from mesa.experimental.datacollection.collectors import DataCollector, collect, Measure
-from mesa.experimental.datacollection.mesa_classes import ConditionalAgentSet
+from mesa.experimental.datacollection.mesa_classes import ConditionalAgentSet, AlternativeConditionalAgentSet
 from mesa.experimental.datacollection.pubsub import ObservableState
 
 
@@ -269,11 +269,11 @@ class EpsteinCivilViolence(ObservableModel):
 
         # conditional groups
         self.quiescent = ConditionalAgentSet(citizens, self, "condition",
-                                             condition=lambda condition: condition == CitizenState.QUIESCENT)
+                                                        condition=lambda condition: condition == CitizenState.QUIESCENT)
         self.active = ConditionalAgentSet(citizens, self, "condition",
-                                          condition=lambda condition: condition == CitizenState.ACTIVE)
+                                                     condition=lambda condition: condition == CitizenState.ACTIVE)
         self.jailed = ConditionalAgentSet(citizens, self, "jail_sentence",
-                                          condition=lambda jail_sentence: jail_sentence > 0)
+                                                     condition=lambda jail_sentence: jail_sentence > 0)
 
         # measures
         self.n_quiescent = Measure(self, self.quiescent, lambda obj: len(obj))
@@ -304,9 +304,9 @@ if __name__ == '__main__':
     dc.collect_all()
 
     start_time = time.perf_counter()
-    for _ in range(50):
+    for _ in range(100):
         model.step()
         dc.collect_all()
-    print(f"Elapsed time: {time.perf_counter()-start_time} seconds")
+    print(f"Elapsed time: {time.perf_counter() - start_time} seconds")
 
     # print(dc.model_data.to_dataframe())

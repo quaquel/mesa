@@ -1,4 +1,6 @@
 from typing import Any, Iterable, Callable, List
+from functools import wraps
+import weakref
 
 import itertools
 
@@ -7,6 +9,78 @@ from ...model import Model
 from .pubsub import MessageProducer, MessageType
 from .collectors import Measure, MeasureDescriptor
 
+
+def apply_condtion_wrapper(method):
+    @wraps(method)
+    def wrapped(self, *args, **kwargs):
+        if self.agents is None:
+            agents = self.model.agents
+        else:
+            agents = self.agents
+
+        self._agents = weakref.WeakKeyDictionary({agent: None for agent in agents
+                                                  if self.condition(getattr(agent, self.observable_state))})
+
+        return method(self, *args, **kwargs)
+
+    return wrapped
+
+
+class WrappingMetaClass(type):
+    def __new__(meta, classname, bases, classDict):
+        newClassDict = {}
+        for method_name in ["step", "do", "get", "shuffle", "select"]:
+            newClassDict[method_name] = apply_condtion_wrapper(classDict[method_name])
+        return type.__new__(meta, classname, bases, newClassDict)
+
+
+class AlternativeConditionalAgentSet(AgentSet):
+
+
+    def __init__(
+            self,
+            agents: Iterable[Agent] | None,
+            model: Model,
+            observable_state: str,
+            condition: Callable[[Any], bool]
+    ) -> None:
+        super().__init__({}, model)
+        self.agents = agents
+        self.condition = condition
+        self.observable_state = observable_state
+
+    @apply_condtion_wrapper
+    def do(
+        self, method_name: str, *args, return_results: bool = False, **kwargs
+    ) -> AgentSet | list[Any]:
+        return super().do(method_name, *args, return_results=return_results)
+
+    @apply_condtion_wrapper
+    def get(self, attr_names: str | list[str]) -> list[Any]:
+        return super().get(attr_names)
+
+    @apply_condtion_wrapper
+    def shuffle(self, inplace: bool = False) -> AgentSet:
+        return super().shuffle(inplace=inplace)
+
+    @apply_condtion_wrapper
+    def select(
+        self,
+        filter_func: Callable[[Agent], bool] | None = None,
+        n: int = 0,
+        inplace: bool = False,
+        agent_type: type[Agent] | None = None,
+    ) -> AgentSet:
+        return super().select(filter_func=filter_func, n=n, inplace=inplace, agent_type=agent_type)
+
+    @apply_condtion_wrapper
+    def sort(
+        self,
+        key: Callable[[Agent], Any] | str,
+        ascending: bool = False,
+        inplace: bool = False,
+    ) -> AgentSet:
+        return super().sort(key, ascending=ascending, inplace=inplace)
 
 
 class ConditionalAgentSet(AgentSet):
@@ -23,7 +97,13 @@ class ConditionalAgentSet(AgentSet):
 
     """
 
-    def __init__(self, agents: Iterable[Agent] | None, model: Model, observable_state:str, condition: Callable[[Any], bool]) -> None:
+    def __init__(
+            self,
+            agents: Iterable[Agent] | None,
+            model: Model,
+            observable_state: str,
+            condition: Callable[[Any], bool]
+    ) -> None:
         """
         FIXME:: ONLY SIMPLE CONDITIONS ARE CURRENTLY SUPPORTED
 
@@ -64,7 +144,7 @@ class ConditionalAgentSet(AgentSet):
             self.discard(agent)
 
     def state_change_handler(self, message):
-       self._apply_condition(message.sender, message.value)
+        self._apply_condition(message.sender, message.value)
 
     def agent_added_handler(self, message):
         agent = message.agent

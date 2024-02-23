@@ -105,14 +105,14 @@ class ObservableState:
 #         self.data = self.message_handler(*args, **kwargs)
 
 
-# class AgentSetObserver:
-#
-#     # FIXME:: you want to initialize this with the current state
-#     def __init__(self, agentset, event, event_handler):
-#         self.event_handler = event_handler
-#         for agent in agentset:
-#             agent.subscribe(event, self.handler)
-#         self.data = {}
-#
-#     def handler(self, subject, *args, **kwargs):
-#         self.data[subject.unique_id] = self.event_handler(subject, *args, **kwargs)
+class AgentSetObserver:
+
+    # FIXME:: you want to initialize this with the current state
+    def __init__(self, agentset, event, event_handler):
+        self.event_handler = event_handler
+        for agent in agentset:
+            agent.subscribe(event, self.handler)
+        self.data = {}
+
+    def handler(self, message, *args, **kwargs):
+        self.data[message.sender.unique_id] = self.event_handler(message)
