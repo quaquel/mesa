@@ -52,6 +52,7 @@ class BoltzmannWealthModel(ObservableModel):
 
 class MoneyAgent(ObservableAgent):
     """An agent with fixed initial wealth."""
+    wealth = ObservableState()
 
     def __init__(self, unique_id, model):
         super().__init__(unique_id, model)
@@ -91,7 +92,10 @@ def some_func(obj):
 if __name__ == '__main__':
     model = BoltzmannWealthModel()
 
-    datacollector = DataCollector(model, [collect("wealth", model.agents),
+    #
+    wealth_observer = AgentSetObserver(model.agents, MoneyAgent.WEALTH_CHANGE, lambda message: message.value)
+
+    datacollector = DataCollector(model, [collect("wealth", wealth_observer, attributes="data"),
                                           collect("gini", model)])
 
 
