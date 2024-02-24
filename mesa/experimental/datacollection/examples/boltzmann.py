@@ -1,12 +1,21 @@
 
 
+from mesa.experimental.datacollection.collectors import (
+    DataCollector,
+    Measure,
+    collect,
+)
+from mesa.experimental.datacollection.mesa_classes import (
+    ObservableAgent,
+    ObservableModel,
+)
+from mesa.experimental.datacollection.pubsub import (
+    AgentSetObserver,
+    ObservableState,
+)
 from mesa.space import MultiGrid
 from mesa.time import RandomActivation
 
-from mesa.experimental.datacollection.mesa_classes import ObservableModel, ObservableAgent
-from mesa.experimental.datacollection.pubsub import MessageType, ObservableState
-from mesa.experimental.datacollection.collectors import collect, DataCollector, Measure, MeasureDescriptor
-from mesa.experimental.datacollection.pubsub import AgentSetObserver
 
 def compute_gini(agents):
     agent_wealths = [agent.wealth for agent in agents]
@@ -89,7 +98,7 @@ def handler(subject, state):
 def some_func(obj):
     return obj.get_value()
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     model = BoltzmannWealthModel()
 
     #

@@ -1,14 +1,13 @@
-from typing import Any, Callable, List
 import itertools
+from typing import Any, Callable
 
 import pandas as pd
 
 from mesa.agent import AgentSet
-from mesa import Model
 
 
 class BaseCollector:
-    def __init__(self, name:str, obj: Any, attributes: str|List[str]=None, fn: Callable=None):
+    def __init__(self, name:str, obj: Any, attributes: str|list[str]=None, fn: Callable=None):
         """
 
         Args
@@ -165,7 +164,7 @@ class DataCollector:
             collector.collect(time)
 
 
-def collect(name:str, obj:Any, attributes: str|List[str]=None, fn: Callable=None):
+def collect(name:str, obj:Any, attributes: str|list[str]=None, fn: Callable=None):
     """
 
     Args
