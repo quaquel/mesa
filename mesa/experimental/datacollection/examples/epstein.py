@@ -1,14 +1,17 @@
-import math
 import enum
+import math
 import time
 
-from mesa.time import RandomActivation
-from mesa.space import SingleGrid
+from mesa.experimental.datacollection.collectors import DataCollector
+from mesa.experimental.datacollection.mesa_classes import (
+    ObservableAgent,
+    ObservableModel,
+)
 
-from mesa.experimental.datacollection.mesa_classes import ObservableModel, ObservableAgent
-from mesa.experimental.datacollection.collectors import DataCollector, collect, Measure
-from mesa.experimental.datacollection.mesa_classes import ConditionalAgentSet, AlternativeConditionalAgentSet
+# from mesa.experimental.datacollection.mesa_classes import PubSubConditionalAgentSet as ConditionalAgentSet
 from mesa.experimental.datacollection.pubsub import ObservableState
+from mesa.space import SingleGrid
+from mesa.time import RandomActivation
 
 
 class EpsteinAgent(ObservableAgent):
@@ -265,20 +268,20 @@ class EpsteinCivilViolence(ObservableModel):
 
         # static groups
         citizens = self.get_agents_of_type(Citizen)
-        cops = self.get_agents_of_type(Cop)
-
-        # conditional groups
-        self.quiescent = ConditionalAgentSet(citizens, self, "condition",
-                                                        condition=lambda condition: condition == CitizenState.QUIESCENT)
-        self.active = ConditionalAgentSet(citizens, self, "condition",
-                                                     condition=lambda condition: condition == CitizenState.ACTIVE)
-        self.jailed = ConditionalAgentSet(citizens, self, "jail_sentence",
-                                                     condition=lambda jail_sentence: jail_sentence > 0)
+        # cops = self.get_agents_of_type(Cop)
+        #
+        # # conditional groups
+        # self.quiescent = ConditionalAgentSet(citizens, self, "condition",
+        #                                                 condition=lambda condition: condition == CitizenState.QUIESCENT)
+        # self.active = ConditionalAgentSet(citizens, self, "condition",
+        #                                              condition=lambda condition: condition == CitizenState.ACTIVE)
+        # self.jailed = ConditionalAgentSet(citizens, self, "jail_sentence",
+        #                                              condition=lambda jail_sentence: jail_sentence > 0)
 
         # measures
-        self.n_quiescent = Measure(self, self.quiescent, lambda obj: len(obj))
-        self.n_active = Measure(self, self.active, lambda obj: len(obj))
-        self.n_jailed = Measure(self, self.jailed, lambda obj: len(obj))
+        # self.n_quiescent = Measure(self, self.quiescent, lambda obj: len(obj))
+        # self.n_active = Measure(self, self.active, lambda obj: len(obj))
+        # self.n_jailed = Measure(self, self.jailed, lambda obj: len(obj))
 
         self.running = True
 
@@ -292,21 +295,44 @@ class EpsteinCivilViolence(ObservableModel):
             self.running = False
 
 
-if __name__ == '__main__':
+class Tally:
+    def __init__(self, model, condition):
+        self.count = 0
+        self.condition = condition
+
+        for agent in model.get_agents_of_type(Citizen):
+            if self.condition(agent):
+                self.count += 1
+            agent.subscribe(agent.CONDITION_CHANGE, self.handler)
+
+    def handler(self, message):
+        if self.condition(message.sender):
+            self.count += 1
+        else:
+            self.count -= 1
+
+
+
+
+
+if __name__ == "__main__":
     model = EpsteinCivilViolence(seed=15)
 
+    # n_quiescent = Tally(model, lambda agent: agent.condition == CitizenState.QUIESCENT)
+
     dc = DataCollector(model, [
-        collect("model_data", model, attributes=["n_quiescent", "n_active", "n_jailed"]),
-        collect("jail_sentence", model.jailed),
-        collect("citizen_data", model.get_agents_of_type(Citizen), ["jail_sentence", "arrest_probability"])
+        # collect("model_data", model, attributes=["n_quiescent", "n_active", "n_jailed"]),
+        # collect("n_quiescent", n_quiescent, attributes="count"),
+        # collect("jail_sentence", model.jailed),
+        # collect("citizen_data", model.get_agents_of_type(Citizen), ["jail_sentence", "arrest_probability"])
     ])
 
-    dc.collect_all()
+    # dc.collect_all()
 
     start_time = time.perf_counter()
-    for _ in range(100):
+    for _ in range(50):
         model.step()
-        dc.collect_all()
+        # dc.collect_all()
     print(f"Elapsed time: {time.perf_counter() - start_time} seconds")
 
     # print(dc.model_data.to_dataframe())

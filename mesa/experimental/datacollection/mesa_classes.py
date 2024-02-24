@@ -1,16 +1,16 @@
-from typing import Any, Iterable, Callable, List
-from functools import wraps
-import weakref
-
 import itertools
+import weakref
+from collections.abc import Iterable
+from functools import wraps
+from typing import Any, Callable
 
 from ...agent import Agent, AgentSet
 from ...model import Model
-from .pubsub import MessageProducer, MessageType
 from .collectors import Measure, MeasureDescriptor
+from .pubsub import MessageProducer, MessageType
 
 
-def apply_condtion_wrapper(method):
+def apply_condition_wrapper(method):
     @wraps(method)
     def wrapped(self, *args, **kwargs):
         if self.agents is None:
@@ -26,15 +26,7 @@ def apply_condtion_wrapper(method):
     return wrapped
 
 
-class WrappingMetaClass(type):
-    def __new__(meta, classname, bases, classDict):
-        newClassDict = {}
-        for method_name in ["step", "do", "get", "shuffle", "select"]:
-            newClassDict[method_name] = apply_condtion_wrapper(classDict[method_name])
-        return type.__new__(meta, classname, bases, newClassDict)
-
-
-class AlternativeConditionalAgentSet(AgentSet):
+class NaiveConditionalAgentSet(AgentSet):
 
 
     def __init__(
@@ -49,21 +41,21 @@ class AlternativeConditionalAgentSet(AgentSet):
         self.condition = condition
         self.observable_state = observable_state
 
-    @apply_condtion_wrapper
+    @apply_condition_wrapper
     def do(
         self, method_name: str, *args, return_results: bool = False, **kwargs
     ) -> AgentSet | list[Any]:
         return super().do(method_name, *args, return_results=return_results)
 
-    @apply_condtion_wrapper
+    @apply_condition_wrapper
     def get(self, attr_names: str | list[str]) -> list[Any]:
         return super().get(attr_names)
 
-    @apply_condtion_wrapper
+    @apply_condition_wrapper
     def shuffle(self, inplace: bool = False) -> AgentSet:
         return super().shuffle(inplace=inplace)
 
-    @apply_condtion_wrapper
+    @apply_condition_wrapper
     def select(
         self,
         filter_func: Callable[[Agent], bool] | None = None,
@@ -73,7 +65,7 @@ class AlternativeConditionalAgentSet(AgentSet):
     ) -> AgentSet:
         return super().select(filter_func=filter_func, n=n, inplace=inplace, agent_type=agent_type)
 
-    @apply_condtion_wrapper
+    @apply_condition_wrapper
     def sort(
         self,
         key: Callable[[Agent], Any] | str,
@@ -83,7 +75,7 @@ class AlternativeConditionalAgentSet(AgentSet):
         return super().sort(key, ascending=ascending, inplace=inplace)
 
 
-class ConditionalAgentSet(AgentSet):
+class PubSubConditionalAgentSet(AgentSet):
     """This is a dynamic agent set where membership depends on a specified condition
 
     For this agent set, memberships depends on a user specified condition, and it can change over the course of the
@@ -194,12 +186,12 @@ class ObservableModel(Model):
             all_agents = itertools.chain.from_iterable(self.agents_.values())
             return AgentSet(all_agents, self)
 
-    def subscribe(self, event: str, event_handler: callable):
-        self.event_producer.subscribe(event, event_handler)
+    def subscribe(self, message_type: MessageType, event_handler: callable):
+        self.event_producer.subscribe(message_type, event_handler)
 
-    def unsubscribe(self, event: str, event_handler: callable):
+    def unsubscribe(self, message_type: MessageType, event_handler: callable):
         # or try except pass, which is slightly faster
-        self.event_producer.unsubscribe(event, event_handler)
+        self.event_producer.unsubscribe(message_type, event_handler)
 
 
 class ObservableAgent(Agent):
@@ -227,6 +219,6 @@ class ObservableAgent(Agent):
     def subscribe(self, event: str, event_handler: callable):
         self.event_producer.subscribe(event, event_handler)
 
-    def unsubscribe(self, event: str, event_handler: callable):
+    def unsubscribe(self, message_type: MessageType, event_handler: callable):
         # or try except pass, which is slightly faster
-        self.event_producer.unsubscribe(event, event_handler)
+        self.event_producer.unsubscribe(message_type, event_handler)

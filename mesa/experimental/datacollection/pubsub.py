@@ -1,8 +1,6 @@
-from enum import StrEnum, auto
-from collections import defaultdict
 import contextlib
-
-from typing import List, Set, Callable, Type, Sequence
+from collections import defaultdict
+from typing import Callable
 
 
 class MessageType:
@@ -15,11 +13,11 @@ class MessageType:
     def __init__(self, message_fields: str | list[str] | None = None) -> None:
         if isinstance(message_fields, str):
             message_fields = [message_fields, ]
-        self.message_fields: Set[str] = set(message_fields)
+        self.message_fields: set[str] = set(message_fields)
         self.name: str | None = None
-        self.defining_class: Type | None = None
+        self.defining_class: type | None = None
 
-    def __set_name__(self, defining_class: Type, name: str) -> None:
+    def __set_name__(self, defining_class: type, name: str) -> None:
         self.defining_class = defining_class
         self.name = name
 
@@ -48,7 +46,7 @@ class MessageProducer:
         self.subscribers = defaultdict(list)
         self.owner = owner
 
-    def subscribe(self, message_type: MessageType, event_handler: Callable):
+    def subscribe(self, message_type: [MessageType], event_handler: Callable):
         self.subscribers[message_type].append(event_handler)
 
     def unsubscribe(self, message_type: MessageType, event_handler: Callable):
@@ -92,27 +90,5 @@ class ObservableState:
 
     def __set__(self, instance, value):
         setattr(instance, self.private_name, value)
-        instance.event_producer.send_message(getattr(instance, self.message_name), attr_name=self.public_name, value=value)
-
-
-# class Observer:
-#     def __init__(self, obj, event, message_handler):
-#         self.message_handler = message_handler
-#         obj.subscribe(event, self.handler)
-#         self.data = None
-#
-#     def handler(self, *args, **kwargs):
-#         self.data = self.message_handler(*args, **kwargs)
-
-
-class AgentSetObserver:
-
-    # FIXME:: you want to initialize this with the current state
-    def __init__(self, agentset, event, event_handler):
-        self.event_handler = event_handler
-        for agent in agentset:
-            agent.subscribe(event, self.handler)
-        self.data = {}
-
-    def handler(self, message, *args, **kwargs):
-        self.data[message.sender.unique_id] = self.event_handler(message)
+        instance.event_producer.send_message(getattr(instance, self.message_name), attr_name=self.public_name,
+                                             value=value)

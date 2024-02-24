@@ -37,7 +37,7 @@ class Model:
         self.identifier = identifier
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     model1 = Model(1)
     model2 = Model(2)
     print(model1.gini)
