@@ -1,3 +1,6 @@
+import solara
+
+
 class Measure:
 
     def __init__(self, model, identifier, *args, **kwargs):
@@ -42,3 +45,8 @@ if __name__ == "__main__":
     model2 = Model(2)
     print(model1.gini)
     print(model2.gini)
+
+
+    solara.component()
+
+    from solara import toestand

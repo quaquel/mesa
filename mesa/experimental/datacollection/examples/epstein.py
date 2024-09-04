@@ -2,6 +2,8 @@ import enum
 import math
 import time
 
+import solara
+
 from mesa.experimental.datacollection.collectors import DataCollector
 from mesa.experimental.datacollection.mesa_classes import (
     ObservableAgent,
@@ -12,9 +14,13 @@ from mesa.experimental.datacollection.mesa_classes import (
 from mesa.experimental.datacollection.pubsub import ObservableState
 from mesa.space import SingleGrid
 from mesa.time import RandomActivation
+from mesa import Model, Agent
 
 
-class EpsteinAgent(ObservableAgent):
+from psygnal import Signal
+from psygnal.containers import EventedOrderedSet
+
+class EpsteinAgent(Agent):
     def __init__(self, unique_id, model, vision):
         super().__init__(unique_id, model)
         self.vision = vision
@@ -50,8 +56,8 @@ class Citizen(EpsteinAgent):
         arrest_probability: agent's assessment of arrest probability, given
             rebellion
     """
-    condition = ObservableState()
-    jail_sentence = ObservableState()
+    condition = Signal()
+    jail_sentence = Signal()
 
     def __init__(
             self,
@@ -190,7 +196,7 @@ class Cop(EpsteinAgent):
         ]
 
 
-class EpsteinCivilViolence(ObservableModel):
+class EpsteinCivilViolence(Model):
     """
     Model 1 from "Modeling civil violence: An agent-based computational
     approach," by Joshua Epstein.
@@ -215,6 +221,10 @@ class EpsteinCivilViolence(ObservableModel):
         max_iters: model may not have a natural stopping point, so we set a
             max.
     """
+    n_quiescent = Signal(int)
+    n_active = Signal(int)
+    n_jailed = Signal(int)
+
 
     def __init__(
             self,
@@ -329,6 +339,18 @@ if __name__ == "__main__":
 
     # dc.collect_all()
 
+    # TODO signals don't fire automatically
+    # signal also does not handle the name and inner attribute stuff
+
+    @model.n_active.connect
+    def some_handler(*args, **kwargs):
+        print("blaat")
+
+    model.n_active = 5
+    model.n_active.emit(5)
+
+    solara.Reactive
+
     start_time = time.perf_counter()
     for _ in range(50):
         model.step()
@@ -336,3 +358,7 @@ if __name__ == "__main__":
     print(f"Elapsed time: {time.perf_counter() - start_time} seconds")
 
     # print(dc.model_data.to_dataframe())
+
+
+    a = {}
+    a.get

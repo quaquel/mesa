@@ -5,6 +5,9 @@ import pandas as pd
 
 from mesa.agent import AgentSet
 
+import psygnal
+from psygnal import Signal, SignalGroup
+
 
 class BaseCollector:
     def __init__(self, name:str, obj: Any, attributes: str|list[str]=None, fn: Callable=None):

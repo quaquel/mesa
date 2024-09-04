@@ -34,7 +34,7 @@ class BoltzmannWealthModel(ObservableModel):
     highly skewed distribution of wealth.
     """
 
-    # gini = MeasureDescriptor()
+    gini = MeasureDescriptor()
 
     def __init__(self, N=100, width=10, height=10):
         super().__init__()
@@ -57,6 +57,8 @@ class BoltzmannWealthModel(ObservableModel):
 
     def step(self):
         self.schedule.step()
+
+
 
 
 class MoneyAgent(ObservableAgent):
