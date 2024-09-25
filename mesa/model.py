@@ -49,8 +49,12 @@ class Model:
             kwargs: keyword arguments to pass onto super
         """
         self.running = True
-        self.schedule = None
         self.steps: int = 0
+
+        # some additional typing information
+        self._agents: dict[Agent, None]
+        self._agents_by_type: dict[type[Agent], AgentSet]
+        self._all_agents: AgentSet
 
         self._setup_agent_registration()
 
@@ -226,3 +230,17 @@ class Model:
         )
         # Collect data for the first time during initialization.
         self.datacollector.collect(self)
+
+    def __init_subclass__(cls, **kwargs):
+        """pPevent subclasses from overwriting attributes used by MESA."""
+        claimed_by_mesa = {"_agents", "_seed", "seed", "_wrapped_step", "steps",
+                           "_agents_by_type", "_all_agents", "running", "random"}
+
+        forbidden = {
+            k for k in getattr(cls, "__dict__", ()) if k in claimed_by_mesa
+        }
+        if forbidden:
+            raise TypeError(
+                f"A subclass of Model cannot use MESA specific attributes:'"
+                f" Found: {forbidden}"
+            )

@@ -82,6 +82,19 @@ class Agent:
         """Return a seeded rng."""
         return self.model.random
 
+    def __init_subclass__(cls, **kwargs):
+        """pPevent subclasses from overwriting attributes used by MESA."""
+        claimed_by_mesa = {"unique_id", "random", "model", "pos"}
+
+        forbidden = {
+            k for k in getattr(cls, "__dict__", ()) if k in claimed_by_mesa
+        }
+        if forbidden:
+            raise TypeError(
+                f"A subclass of Agent cannot use MESA specific attributes:'"
+                f" Found: {forbidden}"
+            )
+
 
 class AgentSet(MutableSet, Sequence):
     """A collection class that represents an ordered set of agents within an agent-based model (ABM).
