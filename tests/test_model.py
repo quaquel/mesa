@@ -8,7 +8,6 @@ def test_model_set_up():
     """Test Model initialization."""
     model = Model()
     assert model.running is True
-    assert model.schedule is None
     assert model.steps == 0
     model.step()
     assert model.steps == 1
@@ -18,8 +17,6 @@ def test_running():
     """Test Model is running."""
 
     class TestModel(Model):
-        steps = 0
-
         def step(self):
             """Increase steps until 10."""
             if self.steps == 10:
