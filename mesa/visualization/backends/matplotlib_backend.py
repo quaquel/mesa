@@ -96,7 +96,7 @@ class MatplotlibBackend(AbstractRenderer):
             "linewidths": [],
         }
         # Import here to prevent circular imports
-        from mesa.visualization.components import AgentPortrayalStyle
+        from mesa.visualization.components import AgentPortrayalStyle  # noqa: PLC0415
 
         # Get default values from AgentPortrayalStyle
         style_fields = {f.name: f.default for f in fields(AgentPortrayalStyle)}
@@ -142,8 +142,6 @@ class MatplotlibBackend(AbstractRenderer):
             else:
                 aps = portray_input
                 # Set defaults if not provided
-                if aps.edgecolors is None:
-                    aps.edgecolors = aps.color
                 if aps.x is None and aps.y is None:
                     aps.x, aps.y = self._get_agent_pos(agent, space)
 
@@ -215,7 +213,7 @@ class MatplotlibBackend(AbstractRenderer):
         loc_x, loc_y = loc[:, 0], loc[:, 1]
         marker = arguments.pop("marker")
         zorder = arguments.pop("zorder")
-        malpha = arguments.pop("alpha")
+        malpha = arguments["alpha"]
         msize = arguments["s"]
 
         # Validate edge arguments
