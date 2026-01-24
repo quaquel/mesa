@@ -67,24 +67,22 @@ class Sheep(Animal):
 
     def move(self):
         """Move towards a cell where there isn't a wolf, and preferably with grown grass."""
-        cells_without_wolves = self.cell.neighborhood.select(
-            lambda cell: not any(isinstance(obj, Wolf) for obj in cell.agents)
-        )
+        n = self.cell.get_neighborhood().cells
+        cells_without_wolves = [cell for cell in n if not any(isinstance(obj, Wolf) for obj in cell.agents) ]
+
         # If all surrounding cells have wolves, stay put
         if len(cells_without_wolves) == 0:
             return
 
         # Among safe cells, prefer those with grown grass
-        cells_with_grass = cells_without_wolves.select(
-            lambda cell: any(
-                isinstance(obj, GrassPatch) and obj.fully_grown for obj in cell.agents
-            )
-        )
+        cells_with_grass = [cell for cell in cells_without_wolves if any(
+                isinstance(obj, GrassPatch) and obj.fully_grown for obj in cell.agents)]
+
         # Move to a cell with grass if available, otherwise move to any safe cell
         target_cells = (
             cells_with_grass if len(cells_with_grass) > 0 else cells_without_wolves
         )
-        self.cell = target_cells.select_random_cell()
+        self.cell = self.random.choice(target_cells)
 
 
 class Wolf(Animal):
@@ -100,13 +98,13 @@ class Wolf(Animal):
 
     def move(self):
         """Move to a neighboring cell, preferably one with sheep."""
-        cells_with_sheep = self.cell.neighborhood.select(
-            lambda cell: any(isinstance(obj, Sheep) for obj in cell.agents)
-        )
+        n = self.cell.get_neighborhood().cells
+        cells_with_sheep = [c for c in n if any(isinstance(obj, Sheep) for obj in c.agents)]
+
         target_cells = (
-            cells_with_sheep if len(cells_with_sheep) > 0 else self.cell.neighborhood
+            cells_with_sheep if len(cells_with_sheep) > 0 else n
         )
-        self.cell = target_cells.select_random_cell()
+        self.cell = self.random.choice(target_cells)
 
 
 class GrassPatch(FixedAgent):

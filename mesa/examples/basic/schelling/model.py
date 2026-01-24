@@ -4,6 +4,8 @@ from mesa.discrete_space import OrthogonalMooreGrid
 from mesa.examples.basic.schelling.agents import SchellingAgent
 
 
+from rust_grid import Grid
+
 class Schelling(Model):
     """Model class for the Schelling segregation model."""
 
@@ -35,7 +37,7 @@ class Schelling(Model):
         self.minority_pc = minority_pc
 
         # Initialize grid
-        self.grid = OrthogonalMooreGrid((width, height), random=self.random, capacity=1)
+        self.grid = Grid((width, height), random=self.random, capacity=1)
 
         # Track happiness
         self.happy = 0
@@ -78,3 +80,8 @@ class Schelling(Model):
         self.agents.do("assign_state")
         self.datacollector.collect(self)  # Collect data
         self.running = self.happy < len(self.agents)  # Continue until everyone is happy
+
+if __name__ == '__main__':
+    model = Schelling()
+    for _ in range(100):
+        model.step()

@@ -17,6 +17,7 @@ from mesa.discrete_space import OrthogonalVonNeumannGrid
 from mesa.examples.advanced.wolf_sheep.agents import GrassPatch, Sheep, Wolf
 from mesa.experimental.devs import ABMSimulator
 
+from rust_grid import Grid
 
 class WolfSheep(Model):
     """Wolf-Sheep Predation Model.
@@ -70,10 +71,10 @@ class WolfSheep(Model):
         self.grass = grass
 
         # Create grid using experimental cell space
-        self.grid = OrthogonalVonNeumannGrid(
-            [self.height, self.width],
+        self.grid = Grid(
+            (self.height, self.width),
             torus=True,
-            capacity=math.inf,
+            capacity=100,
             random=self.random,
         )
 
@@ -90,13 +91,15 @@ class WolfSheep(Model):
         self.datacollector = DataCollector(model_reporters)
 
         # Create sheep:
+        all_cells = self.grid.all_cells.cells
+
         Sheep.create_agents(
             self,
             initial_sheep,
             energy=self.rng.random((initial_sheep,)) * 2 * sheep_gain_from_food,
             p_reproduce=sheep_reproduce,
             energy_from_food=sheep_gain_from_food,
-            cell=self.random.choices(self.grid.all_cells.cells, k=initial_sheep),
+            cell=self.random.choices(all_cells, k=initial_sheep),
         )
         # Create Wolves:
         Wolf.create_agents(
@@ -105,13 +108,13 @@ class WolfSheep(Model):
             energy=self.rng.random((initial_wolves,)) * 2 * wolf_gain_from_food,
             p_reproduce=wolf_reproduce,
             energy_from_food=wolf_gain_from_food,
-            cell=self.random.choices(self.grid.all_cells.cells, k=initial_wolves),
+            cell=self.random.choices(all_cells, k=initial_wolves),
         )
 
         # Create grass patches if enabled
         if grass:
             possibly_fully_grown = [True, False]
-            for cell in self.grid:
+            for cell in all_cells:
                 fully_grown = self.random.choice(possibly_fully_grown)
                 countdown = (
                     0 if fully_grown else self.random.randrange(0, grass_regrowth_time)
@@ -130,3 +133,8 @@ class WolfSheep(Model):
 
         # Collect data
         self.datacollector.collect(self)
+
+if __name__ == '__main__':
+    simulator = ABMSimulator()
+    model = WolfSheep(20, 20, grass=True, simulator=simulator)
+    simulator.run_for(100)

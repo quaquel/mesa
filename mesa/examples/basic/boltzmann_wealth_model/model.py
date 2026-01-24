@@ -12,6 +12,7 @@ from mesa.datacollection import DataCollector
 from mesa.discrete_space import OrthogonalMooreGrid
 from mesa.examples.basic.boltzmann_wealth_model.agents import MoneyAgent
 
+from rust_grid import Grid
 
 class BoltzmannWealth(Model):
     """A simple model of an economy where agents exchange currency at random.
@@ -39,17 +40,20 @@ class BoltzmannWealth(Model):
         super().__init__(rng=rng)
 
         self.num_agents = n
-        self.grid = OrthogonalMooreGrid((width, height), random=self.random)
+        self.grid = Grid((width, height), random=self.random)
 
         # Set up data collection
         self.datacollector = DataCollector(
             model_reporters={"Gini": self.compute_gini},
             agent_reporters={"Wealth": "wealth"},
         )
+
+        all_cells = self.grid.all_cells.cells
+
         MoneyAgent.create_agents(
             self,
             self.num_agents,
-            self.random.choices(self.grid.all_cells.cells, k=self.num_agents),
+            self.random.choices(all_cells, k=self.num_agents),
         )
 
         self.running = True
@@ -72,3 +76,9 @@ class BoltzmannWealth(Model):
         # Calculate using the standard formula for Gini coefficient
         b = sum(xi * (n - i) for i, xi in enumerate(x)) / (n * sum(x))
         return 1 + (1 / n) - 2 * b
+
+
+if __name__ == '__main__':
+    model = BoltzmannWealth(1000)
+    for _ in range(100):
+        model.step()
