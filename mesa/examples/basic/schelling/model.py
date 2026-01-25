@@ -82,6 +82,6 @@ class Schelling(Model):
         self.running = self.happy < len(self.agents)  # Continue until everyone is happy
 
 if __name__ == '__main__':
-    model = Schelling()
+    model = Schelling(height=100, width=100, density=0.8, homophily=1)
     for _ in range(100):
         model.step()
