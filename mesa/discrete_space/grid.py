@@ -15,7 +15,6 @@ from __future__ import annotations
 
 import copyreg
 from collections.abc import Sequence
-from functools import cached_property
 from itertools import product
 from random import Random
 from typing import Any, TypeVar
@@ -142,10 +141,6 @@ class Grid(DiscreteSpace[T], HasPropertyLayers):
         if self.capacity is not None and not isinstance(self.capacity, float | int):
             raise ValueError("Capacity must be a number or None.")
 
-    @cached_property
-    def cells(self):
-        return list(self._cells.values())
-
     def select_random_empty_cell(self) -> T:  # noqa
         # Use a heuristic: try random sampling first for performance (O(1))
         # FIXME:: basically if grid is close to 99% full, creating empty list can be faster
@@ -159,9 +154,7 @@ class Grid(DiscreteSpace[T], HasPropertyLayers):
         if self._try_random:
             # Limit attempts to avoid infinite loops on full grids
             for _ in range(50):
-                cell = self._cells[(self.random.randrange(self.width), self.random.randrange(self.height))]
-
-                # cell = self.random.choice(self.cells)
+                cell = self.all_cells.select_random_cell()
                 if cell.is_empty:
                     return cell
 
