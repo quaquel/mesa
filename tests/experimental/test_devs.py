@@ -6,14 +6,14 @@ from unittest.mock import MagicMock, Mock
 import pytest
 
 from mesa import Model
-from mesa.experimental.devs.eventlist import (
+from mesa.experimental.devs.simulator import ABMSimulator, DEVSimulator
+from mesa.time import (
     EventGenerator,
     EventList,
     Priority,
     Schedule,
     SimulationEvent,
 )
-from mesa.experimental.devs.simulator import ABMSimulator, DEVSimulator
 
 
 def test_devs_simulator():

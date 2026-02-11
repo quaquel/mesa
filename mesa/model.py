@@ -28,15 +28,15 @@ if TYPE_CHECKING:
     from mesa.experimental.devs import Simulator
 
 from mesa.agent import Agent, _HardKeyAgentSet
-from mesa.experimental.devs.eventlist import (
+from mesa.experimental.scenarios import Scenario
+from mesa.mesa_logging import create_module_logger, method_logger
+from mesa.time import (
     EventGenerator,
     EventList,
     Priority,
     Schedule,
     SimulationEvent,
 )
-from mesa.experimental.scenarios import Scenario
-from mesa.mesa_logging import create_module_logger, method_logger
 
 SeedLike = int | np.integer | Sequence[int] | np.random.SeedSequence
 RNGLike = np.random.Generator | np.random.BitGenerator

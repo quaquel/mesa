@@ -6,7 +6,7 @@ import gc
 import pytest
 
 from mesa import Agent, Model
-from mesa.experimental.devs.eventlist import Schedule
+from mesa.time import Schedule
 
 
 class StepAgent(Agent):

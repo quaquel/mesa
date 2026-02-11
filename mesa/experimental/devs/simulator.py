@@ -27,7 +27,7 @@ import warnings
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-from .eventlist import EventList, Priority, SimulationEvent
+from mesa.time import EventList, Priority, SimulationEvent
 
 if TYPE_CHECKING:
     from mesa import Model
