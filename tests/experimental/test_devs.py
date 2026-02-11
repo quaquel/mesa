@@ -15,6 +15,9 @@ from mesa.time import (
     Schedule,
 )
 
+# Ignore deprecation warnings for Simulator classes in this test file
+pytestmark = pytest.mark.filterwarnings("ignore::FutureWarning")
+
 
 def test_devs_simulator():
     """Tests devs simulator."""
