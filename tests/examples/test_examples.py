@@ -120,7 +120,7 @@ def test_epstein():  # noqa: D103
 
     app.page  # noqa: B018
 
-    model = EpsteinCivilViolence(rng=42)
+    model = EpsteinCivilViolence()
     ref = weakref.ref(model)
 
     model.run_for(10)
