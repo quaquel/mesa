@@ -27,7 +27,8 @@ from mesa.experimental.mesa_signals import (
 if TYPE_CHECKING:
     from mesa.experimental.devs import Simulator
 
-from mesa.agent import Agent, _HardKeyAgentSet
+from mesa.agent import Agent
+from mesa.agentset import _HardKeyAgentSet
 from mesa.experimental.scenarios import Scenario
 from mesa.mesa_logging import create_module_logger, method_logger
 from mesa.time import (

@@ -5,8 +5,8 @@ import pickle
 
 import numpy as np
 import pytest
-from mesa.agent import Agent
 
+from mesa.agent import Agent
 from mesa.agentset import AgentSet, _HardKeyAgentSet
 from mesa.model import Model
 
