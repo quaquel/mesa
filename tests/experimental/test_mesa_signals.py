@@ -36,6 +36,9 @@ def test_observables():
     agent.observe("some_attribute", ObservableSignals.CHANGED, handler)
 
     agent.some_attribute = 10
+    handler.assert_not_called()  # we change it to the same value so no signal
+
+    agent.some_attribute = 20
     handler.assert_called_once()
 
 
