@@ -10,6 +10,7 @@ time
 space
 discrete_space
 datacollection
+batchrunner
 visualization
 logging
 experimental

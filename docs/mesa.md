@@ -11,6 +11,14 @@
     :show-inheritance:
 ```
 
+## mesa.batchrunner module
+
+```{eval-rst}
+.. automodule:: mesa.batchrunner
+    :members:
+    :undoc-members:
+    :show-inheritance:
+```
 
 ## mesa.datacollection module
 
