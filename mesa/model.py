@@ -9,8 +9,6 @@ from __future__ import annotations
 import random
 import warnings
 from collections.abc import Callable, Sequence
-
-# mypy
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -438,5 +436,16 @@ class Model[A: Agent, S: Scenario](HasObservables):
 
         Args:
             end_time: Absolute time to run until
+
+        If model.time is larger than end_time, the method returns directly.
+
         """
+        if self.time > end_time:
+            warnings.warn(
+                f"end_time {end_time} is larger than time {self.time}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return
+
         self._advance_time(end_time)
