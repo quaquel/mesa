@@ -6,7 +6,6 @@ A simple model of wealth distribution based on the Boltzmann-Gibbs distribution.
 Agents move randomly on a grid, giving one unit of wealth to a random neighbor
 when they occupy the same cell.
 """
-from statistics import mode
 
 from mesa import Model
 from mesa.datacollection import DataCollector

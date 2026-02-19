@@ -27,6 +27,7 @@ def geometric_mean(list_of_prices):
 
 class SugarScapeScenario(Scenario):
     """Sugarscape scenario class."""
+
     initial_population: int = 200
     endowment_min: int = 25
     endowment_max: int = 50
