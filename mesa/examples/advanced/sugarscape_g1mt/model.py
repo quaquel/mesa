@@ -6,6 +6,7 @@ import mesa
 from mesa.discrete_space import OrthogonalVonNeumannGrid
 from mesa.discrete_space.property_layer import PropertyLayer
 from mesa.examples.advanced.sugarscape_g1mt.agents import Trader
+from mesa.experimental.scenarios import Scenario
 
 
 # Helper Functions
@@ -24,16 +25,16 @@ def geometric_mean(list_of_prices):
     return np.exp(np.log(list_of_prices).mean())
 
 
-def get_trade(agent):
-    """
-    For agent reporters in data collector
-
-    return list of trade partners and None for other agents
-    """
-    if isinstance(agent, Trader):
-        return agent.trade_partners
-    else:
-        return None
+class SugarScapeScenario(Scenario):
+    """Sugarscape scenario class."""
+    initial_population: int = 200
+    endowment_min: int = 25
+    endowment_max: int = 50
+    metabolism_min: int = 1
+    metabolism_max: int = 5
+    vision_min: int = 1
+    vision_max: int = 5
+    enable_trade: bool = True
 
 
 class SugarscapeG1mt(mesa.Model):
@@ -41,27 +42,17 @@ class SugarscapeG1mt(mesa.Model):
     Manager class to run Sugarscape with Traders
     """
 
-    def __init__(
-        self,
-        width=50,
-        height=50,
-        initial_population=200,
-        endowment_min=25,
-        endowment_max=50,
-        metabolism_min=1,
-        metabolism_max=5,
-        vision_min=1,
-        vision_max=5,
-        enable_trade=True,
-        rng=None,
-    ):
-        super().__init__(rng=rng)
+    def __init__(self, scenario=None):
+        if scenario is None:
+            scenario = SugarScapeScenario()
+
+        super().__init__(scenario=scenario)
         # Initiate width and height of sugarscape
-        self.width = width
-        self.height = height
+        self.width = 50
+        self.height = 50
 
         # Initiate population attributes
-        self.enable_trade = enable_trade
+        self.enable_trade = SugarScapeScenario.enable_trade
         self.running = True
 
         # initiate mesa grid class
@@ -77,7 +68,7 @@ class SugarscapeG1mt(mesa.Model):
                     flatten([a.prices for a in m.agents])
                 ),
             },
-            agent_reporters={"Trade Network": lambda a: get_trade(a)},
+            agent_reporters={"Trade Network": "trade_partners"},
         )
 
         # read in landscape file from supplementary material
@@ -91,24 +82,41 @@ class SugarscapeG1mt(mesa.Model):
             PropertyLayer.from_data("spice", self.spice_distribution)
         )
 
+        n = SugarScapeScenario.initial_population
+
         Trader.create_agents(
             self,
-            initial_population,
-            self.random.choices(self.grid.all_cells.cells, k=initial_population),
+            SugarScapeScenario.initial_population,
+            self.random.choices(self.grid.all_cells.cells, k=n),
             sugar=self.rng.integers(
-                endowment_min, endowment_max, (initial_population,), endpoint=True
+                SugarScapeScenario.endowment_min,
+                SugarScapeScenario.endowment_max,
+                (n,),
+                endpoint=True,
             ),
             spice=self.rng.integers(
-                endowment_min, endowment_max, (initial_population,), endpoint=True
+                SugarScapeScenario.endowment_min,
+                SugarScapeScenario.endowment_max,
+                (n,),
+                endpoint=True,
             ),
             metabolism_sugar=self.rng.integers(
-                metabolism_min, metabolism_max, (initial_population,), endpoint=True
+                SugarScapeScenario.metabolism_min,
+                SugarScapeScenario.metabolism_max,
+                (n,),
+                endpoint=True,
             ),
             metabolism_spice=self.rng.integers(
-                metabolism_min, metabolism_max, (initial_population,), endpoint=True
+                SugarScapeScenario.metabolism_min,
+                SugarScapeScenario.metabolism_max,
+                (n,),
+                endpoint=True,
             ),
             vision=self.rng.integers(
-                vision_min, vision_max, (initial_population,), endpoint=True
+                SugarScapeScenario.vision_min,
+                SugarScapeScenario.vision_max,
+                (n,),
+                endpoint=True,
             ),
         )
 
@@ -126,50 +134,18 @@ class SugarscapeG1mt(mesa.Model):
         )
 
         # step trader agents
-        # to account for agent death and removal we need a separate data structure to
-        # iterate
-        trader_shuffle = self.agents_by_type[Trader].shuffle()
-
-        for agent in trader_shuffle:
-            agent.prices = []
-            agent.trade_partners = []
-            agent.move()
-            agent.eat()
-            agent.maybe_die()
-
-        if not self.enable_trade:
-            # If trade is not enabled, return early
-            self.datacollector.collect(self)
-            return
-
-        trader_shuffle = self.agents_by_type[Trader].shuffle()
-
-        for agent in trader_shuffle:
-            agent.trade_with_neighbors()
-
-        # collect model level data
-        # fixme we can already collect agent class data
-        # fixme, we don't have resource agents anymore so this can be done simpler
+        self.agents.shuffle_do("step")
+        if self.enable_trade:
+            self.agents.shuffle_do("trade_with_neighbors")
         self.datacollector.collect(self)
-        """
-        Mesa is working on updating datacollector agent reporter
-        so it can collect information on specific agents from
-        mesa.time.RandomActivationByType.
-
-        Please see issue #1419 at
-        https://github.com/mesa/mesa/issues/1419
-        (contributions welcome)
-
-        Below is one way to update agent_records to get specific Trader agent data
-        """
-        # Need to remove excess data
-        # Create local variable to store trade data
-        agent_trades = self.datacollector._agent_records[self.time]
-        # Get rid of all None to reduce data storage needs
-        agent_trades = [agent for agent in agent_trades if agent[2] is not None]
-        # Reassign the dictionary value with lean trade data
-        self.datacollector._agent_records[self.time] = agent_trades
 
     def run_model(self, step_count=1000):
         for _ in range(step_count):
             self.step()
+
+
+if __name__ == "__main__":
+    model = SugarscapeG1mt(
+        scenario=SugarScapeScenario(initial_population=100, enable_trade=True)
+    )
+    model.run_for(50)
