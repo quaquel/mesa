@@ -22,6 +22,9 @@ def geometric_mean(list_of_prices):
     """
     find the geometric mean of a list of prices
     """
+    # protects agains an invalid value if no prices
+    if len(list_of_prices) == 0:
+        return -1
     return np.exp(np.log(list_of_prices).mean())
 
 
@@ -146,6 +149,6 @@ class SugarscapeG1mt(mesa.Model):
 
 if __name__ == "__main__":
     model = SugarscapeG1mt(
-        scenario=SugarScapeScenario(initial_population=100, enable_trade=True)
+        scenario=SugarScapeScenario(initial_population=100, enable_trade=False)
     )
     model.run_for(50)

@@ -101,9 +101,9 @@ configurations = {
         "small": {
             "seeds": 50,
             "replications": 5,
-            "steps": 30,
+            "steps": 50,
             "parameters": {
-                "initial_population": 150,
+                "initial_population": 100,
                 "enable_trade": False,
                 "vision_min": 1,
                 "vision_max": 2,
