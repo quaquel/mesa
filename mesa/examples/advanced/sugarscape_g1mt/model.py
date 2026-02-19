@@ -145,10 +145,3 @@ class SugarscapeG1mt(mesa.Model):
     def run_model(self, step_count=1000):
         for _ in range(step_count):
             self.step()
-
-
-if __name__ == "__main__":
-    model = SugarscapeG1mt(
-        scenario=SugarScapeScenario(initial_population=100, enable_trade=False)
-    )
-    model.run_for(50)
