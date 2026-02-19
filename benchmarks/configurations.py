@@ -1,6 +1,12 @@
 """configurations for benchmarks."""
 
-from mesa.examples import BoidFlockers, BoltzmannWealth, Schelling, WolfSheep, SugarscapeG1mt
+from mesa.examples import (
+    BoidFlockers,
+    BoltzmannWealth,
+    Schelling,
+    SugarscapeG1mt,
+    WolfSheep,
+)
 
 configurations = {
     # BoltzmannWealth Model Configurations
@@ -96,24 +102,24 @@ configurations = {
             "seeds": 50,
             "replications": 5,
             "steps": 30,
-            "parameters":{
-                "initial_population":150,
+            "parameters": {
+                "initial_population": 150,
                 "enable_trade": False,
-                "vision_min":1,
-                "vision_max":2
-            }
+                "vision_min": 1,
+                "vision_max": 2,
+            },
         },
-        "large":{
+        "large": {
             "seeds": 10,
             "replications": 3,
             "steps": 50,
             "parameters": {
-                "initial_population":250,
+                "initial_population": 250,
                 "enable_trade": True,
                 "vision_min": 4,
-                "vision_max": 5
-            }
-        }
+                "vision_max": 5,
+            },
+        },
     },
     BoidFlockers: {
         "small": {
