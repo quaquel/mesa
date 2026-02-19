@@ -155,7 +155,9 @@ def test_pd_grid():  # noqa: D103
 
 def test_sugarscape_g1mt():  # noqa: D103
     from mesa.examples.advanced.sugarscape_g1mt import app  # noqa: PLC0415
-    from mesa.examples.advanced.sugarscape_g1mt.model import SugarScapeScenario  # noqa: PLC0415
+    from mesa.examples.advanced.sugarscape_g1mt.model import (
+        SugarScapeScenario,
+    )
 
     app.page  # noqa: B018
 
