@@ -53,7 +53,7 @@ class SugarscapeG1mt(mesa.Model):
         self.height = 50
 
         # Initiate population attributes
-        self.enable_trade = SugarScapeScenario.enable_trade
+        self.enable_trade = self.scenario.enable_trade
         self.running = True
 
         # initiate mesa grid class
@@ -83,39 +83,38 @@ class SugarscapeG1mt(mesa.Model):
             PropertyLayer.from_data("spice", self.spice_distribution)
         )
 
-        n = SugarScapeScenario.initial_population
-
+        n = self.scenario.initial_population
         Trader.create_agents(
             self,
-            SugarScapeScenario.initial_population,
+            self.scenario.initial_population,
             self.random.choices(self.grid.all_cells.cells, k=n),
             sugar=self.rng.integers(
-                SugarScapeScenario.endowment_min,
-                SugarScapeScenario.endowment_max,
+                self.scenario.endowment_min,
+                self.scenario.endowment_min,
                 (n,),
                 endpoint=True,
             ),
             spice=self.rng.integers(
-                SugarScapeScenario.endowment_min,
-                SugarScapeScenario.endowment_max,
+                self.scenario.endowment_min,
+                self.scenario.endowment_min,
                 (n,),
                 endpoint=True,
             ),
             metabolism_sugar=self.rng.integers(
-                SugarScapeScenario.metabolism_min,
-                SugarScapeScenario.metabolism_max,
+                self.scenario.metabolism_min,
+                self.scenario.metabolism_max,
                 (n,),
                 endpoint=True,
             ),
             metabolism_spice=self.rng.integers(
-                SugarScapeScenario.metabolism_min,
-                SugarScapeScenario.metabolism_max,
+                self.scenario.metabolism_min,
+                self.scenario.metabolism_max,
                 (n,),
                 endpoint=True,
             ),
             vision=self.rng.integers(
-                SugarScapeScenario.vision_min,
-                SugarScapeScenario.vision_max,
+                self.scenario.vision_min,
+                self.scenario.vision_max,
                 (n,),
                 endpoint=True,
             ),
@@ -126,7 +125,7 @@ class SugarscapeG1mt(mesa.Model):
         Unique step function that does staged activation of sugar and spice
         and then randomly activates traders
         """
-        # step Resource agents
+        # let resources regrow
         self.grid.sugar.data = np.minimum(
             self.grid.sugar.data + 1, self.sugar_distribution
         )
