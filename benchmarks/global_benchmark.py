@@ -13,8 +13,6 @@ sys.path.insert(0, os.path.abspath(".."))
 
 from configurations import configurations
 
-from mesa.experimental.scenarios import Scenario
-
 
 # Generic function to initialize and run a model
 def run_model(model_class, steps, scenario):
