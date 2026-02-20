@@ -16,13 +16,13 @@ from mesa.experimental.scenarios import Scenario
 
 
 # Generic function to initialize and run a model
-def run_model(model_class, steps, **scenario_kwargs):
+def run_model(model_class, steps, scenario):
     """Run model for given seed and parameter values.
 
     Args:
         model_class: a model class
         steps: number of steps to run the model
-        **scenario_kwargs: parameters for Scenario object
+        scenario: scenario to run
 
     Returns:
         startup time and run time
@@ -33,7 +33,7 @@ def run_model(model_class, steps, **scenario_kwargs):
     # Disable GC during timed runs to avoid random slowdowns
     gc.disable()
     start_init = time.perf_counter()
-    model = model_class(scenario=Scenario(**scenario_kwargs))
+    model = model_class(scenario=scenario)
 
     end_init_start_run = time.perf_counter()
 
@@ -65,21 +65,21 @@ def run_experiments(model_class, config):
     run_times = []
 
     steps = config["steps"]
-    base_params = config["parameters"]
+    scenario = config["scenario"]
 
     for seed in range(1, config["seeds"] + 1):
         fastest_init = float("inf")
         fastest_run = float("inf")
-        run_kwargs = {**base_params, "rng": seed}
+        scenario.rng = seed
 
         # Warm-up: run 3 times before starting measurement
         # This eliminates cold start penalty
         for _ in range(3):
-            run_model(model_class, steps, **run_kwargs)
+            run_model(model_class, steps, scenario)
 
         # Actual measured replications
         for _replication in range(1, config["replications"] + 1):
-            init_time, run_time = run_model(model_class, steps, **run_kwargs)
+            init_time, run_time = run_model(model_class, steps, scenario)
             if init_time < fastest_init:
                 fastest_init = init_time
             if run_time < fastest_run:
