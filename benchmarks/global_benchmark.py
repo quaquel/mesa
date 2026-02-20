@@ -1,5 +1,6 @@
 """runner for global performance benchmarks."""
 
+import copy
 import gc
 import os
 import pickle
@@ -70,16 +71,17 @@ def run_experiments(model_class, config):
     for seed in range(1, config["seeds"] + 1):
         fastest_init = float("inf")
         fastest_run = float("inf")
+
         scenario.rng = seed
 
         # Warm-up: run 3 times before starting measurement
         # This eliminates cold start penalty
         for _ in range(3):
-            run_model(model_class, steps, scenario)
+            run_model(model_class, steps, copy.copy(scenario))
 
         # Actual measured replications
         for _replication in range(1, config["replications"] + 1):
-            init_time, run_time = run_model(model_class, steps, scenario)
+            init_time, run_time = run_model(model_class, steps, copy.copy(scenario))
             if init_time < fastest_init:
                 fastest_init = init_time
             if run_time < fastest_run:
