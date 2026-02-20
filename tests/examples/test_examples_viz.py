@@ -311,7 +311,7 @@ def test_epstein_civil_violence_model(
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
 def test_sugarscape_g1mt_model(solara_test, page_session: playwright.sync_api.Page):
     """Test Sugarscape G1mt model behavior and visualization."""
-    from mesa.examples.advanced.sugarscape_g1mt.model import (
+    from mesa.examples.advanced.sugarscape_g1mt.model import (  # noqa: PLC0415
         SugarScapeScenario,
     )
 
