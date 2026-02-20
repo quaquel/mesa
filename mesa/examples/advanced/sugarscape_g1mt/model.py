@@ -22,7 +22,7 @@ def geometric_mean(list_of_prices):
     """
     find the geometric mean of a list of prices
     """
-    # protects agains an invalid value if no prices
+    # protects against an invalid value if no prices
     if len(list_of_prices) == 0:
         return -1
     return np.exp(np.log(list_of_prices).mean())
