@@ -3,11 +3,17 @@ import numpy as np
 
 import mesa
 from mesa import Agent
+from mesa.experimental.scenarios import Scenario
 from mesa.examples.advanced.alliance_formation.agents import AllianceAgent
 from mesa.experimental.meta_agents.meta_agent import (
     create_meta_agent,
     find_combinations,
 )
+
+class AllianceScenario(Scenario):
+    n: int = 50
+    mean: float = 0.5
+    std_dev: float = 0.2
 
 
 class MultiLevelAllianceModel(mesa.Model):
@@ -15,7 +21,7 @@ class MultiLevelAllianceModel(mesa.Model):
     Model for simulating multi-level alliances among agents.
     """
 
-    def __init__(self, n=50, mean=0.5, std_dev=0.1, rng=42):
+    def __init__(self, scenario: AllianceScenario=None):
         """
         Initialize the model.
 
@@ -25,17 +31,19 @@ class MultiLevelAllianceModel(mesa.Model):
             std_dev (float): Standard deviation for normal distribution.
             rng (int): Random rng.
         """
-        super().__init__(rng=rng)
-        self.population = n
+        if scenario is None:
+            scenario = AllianceScenario()
+
+        super().__init__(scenario=scenario)
         self.network = nx.Graph()  # Initialize the network
         self.datacollector = mesa.DataCollector(model_reporters={"Network": "network"})
 
         # Create Agents
-        power = self.rng.normal(mean, std_dev, n)
+        power = self.rng.normal(scenario.mean, scenario.std_dev, scenario.n)
         power = np.clip(power, 0, 1)
-        position = self.rng.normal(mean, std_dev, n)
+        position = self.rng.normal(scenario.mean, scenario.std_dev, scenario.n)
         position = np.clip(position, 0, 1)
-        AllianceAgent.create_agents(self, n, power, position)
+        AllianceAgent.create_agents(self, scenario.n, power, position)
         agent_ids = [
             (agent.unique_id, {"size": 300, "level": 0}) for agent in self.agents
         ]
