@@ -10,6 +10,7 @@ from mesa.examples import (
     BoltzmannWealth,
     ConwaysGameOfLife,
     EpsteinCivilViolence,
+    MultiLevelAllianceModel,
     PdGrid,
     Schelling,
     SugarscapeG1mt,
@@ -20,6 +21,9 @@ from mesa.examples.advanced.wolf_sheep.model import WolfSheepScenario
 from mesa.examples.basic.boid_flockers.model import BoidsScenario
 from mesa.examples.basic.boltzmann_wealth_model.model import BoltzmannScenario
 from mesa.examples.basic.schelling.model import SchellingScenario
+from mesa.examples.advanced.alliance_formation.model import AllianceScenario
+from mesa.examples.advanced.pd_grid.model import PrisonersDilemmaScenario
+
 from mesa.visualization.components import AgentPortrayalStyle
 from mesa.visualization.components.matplotlib_components import (
     PlotMatplotlib,
@@ -331,7 +335,7 @@ def test_sugarscape_g1mt_model(solara_test, page_session: playwright.sync_api.Pa
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
 def test_pd_grid_model(solara_test, page_session: playwright.sync_api.Page):
     """Test Prisoner's Dilemma model behavior and visualization."""
-    model = PdGrid(rng=42)
+    model = PdGrid(scenario=PrisonersDilemmaScenario(rng=42))
 
     def agent_portrayal(agent):
         return AgentPortrayalStyle(
@@ -346,6 +350,22 @@ def test_pd_grid_model(solara_test, page_session: playwright.sync_api.Page):
         model=model,
         agent_portrayal=agent_portrayal,
         measure_config=measure_config,
+        solara_test=solara_test,
+        page_session=page_session,
+    )
+
+@pytest.mark.filterwarnings("ignore::DeprecationWarning")
+def test_alliance_model(solara_test, page_session: playwright.sync_api.Page):
+    """Test alliance formation visualization."""
+    model = MultiLevelAllianceModel(scenario=AllianceScenario(n=50, rng=42))
+
+    def agent_portrayal(agent):
+        return AgentPortrayalStyle()
+
+    run_model_test(
+        model=model,
+        agent_portrayal=agent_portrayal,
+        measure_config=None,
         solara_test=solara_test,
         page_session=page_session,
     )
