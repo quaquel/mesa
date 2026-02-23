@@ -3,12 +3,13 @@ import numpy as np
 
 import mesa
 from mesa import Agent
-from mesa.experimental.scenarios import Scenario
 from mesa.examples.advanced.alliance_formation.agents import AllianceAgent
 from mesa.experimental.meta_agents.meta_agent import (
     create_meta_agent,
     find_combinations,
 )
+from mesa.experimental.scenarios import Scenario
+
 
 class AllianceScenario(Scenario):
     """Scenario for the Alliance model."""
