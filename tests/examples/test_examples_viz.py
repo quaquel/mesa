@@ -354,7 +354,7 @@ def test_pd_grid_model(solara_test, page_session: playwright.sync_api.Page):
         page_session=page_session,
     )
 
-# fixme: we cannot test alliance model yet because it has not space
+# fixme: model has no space, so test code breaks on this
 # @pytest.mark.filterwarnings("ignore::DeprecationWarning")
 # def test_alliance_model(solara_test, page_session: playwright.sync_api.Page):
 #     """Test alliance formation visualization."""

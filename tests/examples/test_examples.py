@@ -14,12 +14,12 @@ from mesa.examples import (
     VirusOnNetwork,
     WolfSheep,
 )
+from mesa.examples.advanced.alliance_formation.model import AllianceScenario
+from mesa.examples.advanced.pd_grid.model import PrisonersDilemmaScenario
 from mesa.examples.advanced.wolf_sheep.model import WolfSheepScenario
 from mesa.examples.basic.boid_flockers.model import BoidsScenario
 from mesa.examples.basic.boltzmann_wealth_model.model import BoltzmannScenario
 from mesa.examples.basic.schelling.model import SchellingScenario
-from mesa.examples.advanced.alliance_formation.model import AllianceScenario
-from mesa.examples.advanced.pd_grid.model import PrisonersDilemmaScenario
 
 
 def test_boltzmann_model():  # noqa: D103
@@ -191,7 +191,6 @@ def test_wolf_sheep():  # noqa: D103
 
 def test_alliance_formation_model():  # noqa: D103
     from mesa.examples.advanced.alliance_formation import app  # noqa: PLC0415
-
 
     app.page  # noqa: B018
 

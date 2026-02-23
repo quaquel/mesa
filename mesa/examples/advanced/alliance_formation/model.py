@@ -24,7 +24,7 @@ class MultiLevelAllianceModel(mesa.Model):
     Model for simulating multi-level alliances among agents.
     """
 
-    def __init__(self, scenario: AllianceScenario=None):
+    def __init__(self, scenario: AllianceScenario = None):
         """
         Initialize the model.
 
