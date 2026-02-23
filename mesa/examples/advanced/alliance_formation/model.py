@@ -11,6 +11,8 @@ from mesa.experimental.meta_agents.meta_agent import (
 )
 
 class AllianceScenario(Scenario):
+    """Scenario for the Alliance model."""
+
     n: int = 50
     mean: float = 0.5
     std_dev: float = 0.2
