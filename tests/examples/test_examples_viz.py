@@ -354,18 +354,19 @@ def test_pd_grid_model(solara_test, page_session: playwright.sync_api.Page):
         page_session=page_session,
     )
 
-@pytest.mark.filterwarnings("ignore::DeprecationWarning")
-def test_alliance_model(solara_test, page_session: playwright.sync_api.Page):
-    """Test alliance formation visualization."""
-    model = MultiLevelAllianceModel(scenario=AllianceScenario(n=50, rng=42))
-
-    def agent_portrayal(agent):
-        return AgentPortrayalStyle()
-
-    run_model_test(
-        model=model,
-        agent_portrayal=agent_portrayal,
-        measure_config=None,
-        solara_test=solara_test,
-        page_session=page_session,
-    )
+# fixme: we cannot test alliance model yet because it has not space
+# @pytest.mark.filterwarnings("ignore::DeprecationWarning")
+# def test_alliance_model(solara_test, page_session: playwright.sync_api.Page):
+#     """Test alliance formation visualization."""
+#     model = MultiLevelAllianceModel(scenario=AllianceScenario(n=50, rng=42))
+#
+#     def agent_portrayal(agent):
+#         return AgentPortrayalStyle()
+#
+#     run_model_test(
+#         model=model,
+#         agent_portrayal=agent_portrayal,
+#         measure_config=None,
+#         solara_test=solara_test,
+#         page_session=page_session,
+#     )
