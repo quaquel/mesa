@@ -3,7 +3,10 @@ import networkx as nx
 import solara
 from matplotlib.figure import Figure
 
-from mesa.examples.advanced.alliance_formation.model import MultiLevelAllianceModel, AllianceScenario
+from mesa.examples.advanced.alliance_formation.model import (
+    AllianceScenario,
+    MultiLevelAllianceModel,
+)
 from mesa.visualization import SolaraViz
 from mesa.visualization.utils import update_counter
 

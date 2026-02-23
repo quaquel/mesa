@@ -17,13 +17,12 @@ from mesa.examples import (
     VirusOnNetwork,
     WolfSheep,
 )
+from mesa.examples.advanced.alliance_formation.model import AllianceScenario
+from mesa.examples.advanced.pd_grid.model import PrisonersDilemmaScenario
 from mesa.examples.advanced.wolf_sheep.model import WolfSheepScenario
 from mesa.examples.basic.boid_flockers.model import BoidsScenario
 from mesa.examples.basic.boltzmann_wealth_model.model import BoltzmannScenario
 from mesa.examples.basic.schelling.model import SchellingScenario
-from mesa.examples.advanced.alliance_formation.model import AllianceScenario
-from mesa.examples.advanced.pd_grid.model import PrisonersDilemmaScenario
-
 from mesa.visualization.components import AgentPortrayalStyle
 from mesa.visualization.components.matplotlib_components import (
     PlotMatplotlib,
@@ -353,6 +352,7 @@ def test_pd_grid_model(solara_test, page_session: playwright.sync_api.Page):
         solara_test=solara_test,
         page_session=page_session,
     )
+
 
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
 def test_alliance_model(solara_test, page_session: playwright.sync_api.Page):

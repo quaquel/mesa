@@ -9,12 +9,12 @@ from mesa.experimental.scenarios import Scenario
 
 class PrisonersDilemmaScenario(Scenario):
     """Scenario for Prisoner's Dilemma model."""
+
     width: int = 50
     height: int = 50
     activation_order: Literal["Sequential", "Random", "Simultaneous"] = "Random"
-    payoff: None| dict[tuple[str, str], float] = None
+    payoff: None | dict[tuple[str, str], float] = None
     torus: bool = True
-
 
 
 class PdGrid(mesa.Model):
@@ -37,7 +37,8 @@ class PdGrid(mesa.Model):
     }
 
     def __init__(
-        self, scenario=None,
+        self,
+        scenario=None,
     ):
         """
         Create a new Spatial Prisoners' Dilemma Model.
@@ -53,7 +54,9 @@ class PdGrid(mesa.Model):
 
         super().__init__(scenario=scenario)
         self.activation_order = scenario.activation_order
-        self.grid = OrthogonalMooreGrid((scenario.width, scenario.height), torus=scenario.torus, random=self.random)
+        self.grid = OrthogonalMooreGrid(
+            (scenario.width, scenario.height), torus=scenario.torus, random=self.random
+        )
 
         if scenario.payoff is not None:
             self.payoff = scenario.payoff
