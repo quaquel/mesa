@@ -4,7 +4,6 @@ import numpy as np
 
 import mesa
 from mesa.discrete_space import OrthogonalVonNeumannGrid
-from mesa.discrete_space.property_layer import PropertyLayer
 from mesa.examples.advanced.sugarscape_g1mt.agents import Trader
 from mesa.experimental.scenarios import Scenario
 
@@ -79,12 +78,8 @@ class SugarscapeG1mt(mesa.Model):
         self.sugar_distribution = np.genfromtxt(Path(__file__).parent / "sugar-map.txt")
         self.spice_distribution = np.flip(self.sugar_distribution, 1)
 
-        self.grid.add_property_layer(
-            PropertyLayer.from_data("sugar", self.sugar_distribution)
-        )
-        self.grid.add_property_layer(
-            PropertyLayer.from_data("spice", self.spice_distribution)
-        )
+        self.grid.add_property_layer("sugar", self.sugar_distribution.copy())
+        self.grid.add_property_layer("spice", self.spice_distribution.copy())
 
         n = self.scenario.initial_population
         Trader.create_agents(
@@ -128,13 +123,8 @@ class SugarscapeG1mt(mesa.Model):
         Unique step function that does staged activation of sugar and spice
         and then randomly activates traders
         """
-        # let resources regrow
-        self.grid.sugar.data = np.minimum(
-            self.grid.sugar.data + 1, self.sugar_distribution
-        )
-        self.grid.spice.data = np.minimum(
-            self.grid.spice.data + 1, self.spice_distribution
-        )
+        self.grid.sugar[:] = np.minimum(self.grid.sugar + 1, self.sugar_distribution)
+        self.grid.spice[:] = np.minimum(self.grid.spice + 1, self.spice_distribution)
 
         # step trader agents
         self.agents.shuffle_do("step")
