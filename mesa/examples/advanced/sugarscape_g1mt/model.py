@@ -88,13 +88,13 @@ class SugarscapeG1mt(mesa.Model):
             self.random.choices(self.grid.all_cells.cells, k=n),
             sugar=self.rng.integers(
                 self.scenario.endowment_min,
-                self.scenario.endowment_min,
+                self.scenario.max,
                 (n,),
                 endpoint=True,
             ),
             spice=self.rng.integers(
                 self.scenario.endowment_min,
-                self.scenario.endowment_min,
+                self.scenario.endowment_max,
                 (n,),
                 endpoint=True,
             ),
