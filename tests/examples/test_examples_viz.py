@@ -44,7 +44,7 @@ def run_model_test(
     try:
         # Create visualizations for the initial model state
         space_viz = SpaceMatplotlib(
-            model=model, agent_portrayal=agent_portrayal, propertylayer_portrayal=None
+            model=model, agent_portrayal=agent_portrayal, property_layer_portrayal=None
         )
         initial_graph = None
 
@@ -66,7 +66,7 @@ def run_model_test(
 
         # Create new visualizations for the updated model state
         space_viz = SpaceMatplotlib(
-            model=model, agent_portrayal=agent_portrayal, propertylayer_portrayal=None
+            model=model, agent_portrayal=agent_portrayal, property_layer_portrayal=None
         )
         changed_graph = None
 
@@ -312,7 +312,11 @@ def test_epstein_civil_violence_model(
 @pytest.mark.filterwarnings("ignore::DeprecationWarning")
 def test_sugarscape_g1mt_model(solara_test, page_session: playwright.sync_api.Page):
     """Test Sugarscape G1mt model behavior and visualization."""
-    model = SugarscapeG1mt(rng=42)
+    from mesa.examples.advanced.sugarscape_g1mt.model import (  # noqa: PLC0415
+        SugarScapeScenario,
+    )
+
+    model = SugarscapeG1mt(SugarScapeScenario(rng=42))
 
     def agent_portrayal(agent):
         return AgentPortrayalStyle(marker="o", color="red", size=10)
