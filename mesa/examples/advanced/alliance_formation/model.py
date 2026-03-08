@@ -16,7 +16,7 @@ class AllianceScenario(Scenario):
 
     n: int = 50
     mean: float = 0.5
-    std_dev: float = 0.2
+    std_dev: float = 0.1
 
 
 class MultiLevelAllianceModel(mesa.Model):
