@@ -85,12 +85,11 @@ def test_orthogonal_grid_neumann():
     for connection in grid._cells[(9, 9)].connections.values():
         assert connection.coordinate in {(9, 0), (9, 8), (8, 9), (0, 9)}
 
-
     # von neumann capacity check
     grid = OrthogonalVonNeumannGrid(
         (width, height), torus=False, capacity=2, random=random.Random(42)
     )
-    assert grid._cells[(0,0)].capacity == 2
+    assert grid._cells[(0, 0)].capacity == 2
 
 
 def test_orthogonal_grid_neumann_3d():
