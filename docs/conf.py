@@ -128,8 +128,9 @@ html_theme = "pydata_sphinx_theme"
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
-    "navbar_start": ["navbar-logo"],
+    "navbar_start": ["navbar-logo", "version-switcher"],
     "switcher": {
+        "json_url": "https://mesa.readthedocs.io/en/stable/_static/switcher.json",
         "version_match": os.environ.get("READTHEDOCS_VERSION", release),
     },
 }
