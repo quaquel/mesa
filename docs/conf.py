@@ -129,6 +129,9 @@ html_theme = "pydata_sphinx_theme"
 # documentation.
 html_theme_options = {
     "navbar_start": ["navbar-logo"],
+    "switcher": {
+        "version_match": os.environ.get("READTHEDOCS_VERSION", release),
+    },
 }
 
 # Add any paths that contain custom themes here, relative to this directory.
