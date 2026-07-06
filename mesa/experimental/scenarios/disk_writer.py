@@ -107,11 +107,11 @@ def _evict(keys: Iterable[_StreamKey]) -> None:
     for key in keys:
         try:  # noqa: SIM105
             _STREAMS.pop(key).close()
-        except Exception:  # noqa: BLE001, S110
+        except Exception:  # noqa: S110
             pass
         try:  # noqa: SIM105
             _SINKS.pop(key).close()
-        except Exception:  # noqa: BLE001, S110
+        except Exception:  # noqa: S110
             pass
         _SCHEMAS.pop(key, None)
 
@@ -190,7 +190,9 @@ class DiskStreamWriter:
         filename = f"worker-{self.session}-{_HOST}-{_PID}.arrow"
         return self.store_dir / "outputs" / output_name / filename
 
-    def to_reference(self, run_id: RunId, outcome: dict[str, pd.DataFrame]) -> DiskReference:
+    def to_reference(
+        self, run_id: RunId, outcome: dict[str, pd.DataFrame]
+    ) -> DiskReference:
         """Persist a run's outcome and return a key-only reference.
 
         Validates every named output first, then writes every output — the
