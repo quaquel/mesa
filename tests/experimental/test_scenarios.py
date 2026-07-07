@@ -423,10 +423,10 @@ def test_run_configuration(mocker):
             self.data_recorder = dummy_recorder()
 
             # setting up the mock
-            self.data_recorder.get_table_dataframe.return_value = pd.DataFrame()
+            self.data_recorder.get_table_dataframe.return_value = pd.DataFrame(columns=["x"])
             self.data_recorder.get_all_dataframes.return_value = {
-                "a": pd.DataFrame(),
-                "b": pd.DataFrame(),
+                "a": pd.DataFrame(columns=["a"]),
+                "b": pd.DataFrame(columns=["b"]),
             }
 
     until = 10
@@ -564,10 +564,10 @@ def scenario_list():
 
 
 @pytest.fixture
-def populated_store(scenario_list):
+def populated_store(scenario_list, basic_config):
     """Populated InMemoryStore."""
     store = InMemoryStore()
-    store.write_scenarios(scenario_list)
+    store.write_scenarios(scenario_list, basic_config)
     return store, scenario_list
 
 
@@ -586,10 +586,10 @@ def maybe_executor(request):
 # ============================================================
 
 
-def test_store_write_and_read_scenarios(scenario_list):
+def test_store_write_and_read_scenarios(scenario_list, basic_config):
     """Store and read scenarios."""
     store = InMemoryStore()
-    store.write_scenarios(scenario_list)
+    store.write_scenarios(scenario_list, basic_config)
     recovered = store.read_scenarios()
     assert len(recovered) == len(scenario_list)
     assert {s.scenario_id for s in recovered} == {s.scenario_id for s in scenario_list}

@@ -16,9 +16,11 @@ Layout::
 
 Two construction paths:
 
-- ``DiskStore(store_dir, ...)`` creates a NEW store: it writes ``store.json``
-  exclusively (failing if the directory already holds one), mints a session
-  token, and starts with an empty run set.
+- ``DiskStore(store_dir, ...)`` prepares a NEW store directory and mints a
+  session token, but does not yet write ``store.json`` — that happens in
+  ``write_scenarios``, once a ``RunConfiguration`` is available to derive
+  provenance from (see ``write_scenarios``). ``write_scenarios`` writes
+  ``store.json`` exclusively (failing if the directory already holds one).
 - ``DiskStore.from_directory(store_dir, scenario_class)`` attaches to an
   EXISTING store to read it back: it reads the manifests and the status log
   into the run set instead of writing anything. Read-only — resuming an
@@ -57,9 +59,9 @@ from mesa.experimental.scenarios.store import RunId, RunRecord, Status
 
 if TYPE_CHECKING:
     from mesa.experimental.scenarios.exceptions import FailureInfo
+    from mesa.experimental.scenarios.runner import RunConfiguration
     from mesa.experimental.scenarios.scenario import Scenario
     from mesa.experimental.scenarios.store import Reference
-    from mesa.model import Model
 
 _ID_COLUMNS = ["scenario_id", "replication_id"]
 
@@ -71,23 +73,18 @@ class DiskStore:
         self,
         store_dir: str | Path,
         *,
-        model_class: type[Model] | None = None,
         on_schema_conflict: str = "warn",
     ):
         """Create a new store rooted at ``store_dir``.
 
-        Writes ``store.json`` exclusively — construction fails if the directory
-        already contains one, so a new sweep never silently overwrites an
-        existing store. Use ``from_directory`` to attach to an existing store.
+        Only prepares the directory; ``store.json`` is not written until
+        ``write_scenarios`` runs, because provenance is derived from the
+        ``RunConfiguration`` supplied there (see ``write_scenarios``), not from
+        anything known at construction time.
 
         Args:
             store_dir: root directory of the store. The directory is created if
                        it does not yet exist on disk.
-            model_class: the model being run, used only to record informational
-                git provenance for the model's source tree. Best-effort and
-                non-gating; omit it and no git block is recorded. Not
-                cross-checked against the config actually run — a mismatched
-                class records misleading provenance.
             on_schema_conflict: how the read path resolves outputs whose schemas
                 differ across workers — ``"warn"`` unifies with null-fill and
                 warns, ``"raise"`` raises. Within-worker deviation is always an
@@ -104,12 +101,6 @@ class DiskStore:
 
         self.store_dir.mkdir(parents=True, exist_ok=True)
         (self.store_dir / "outputs").mkdir(exist_ok=True)
-
-        store_metadata.write_store_manifest(
-            self.store_dir,
-            session=self.session,
-            provenance=store_metadata.collect_provenance(model_class=model_class),
-        )
 
         # The run set: RunId -> RunRecord. Seeded by write_scenarios; each
         # record's status is updated in place by mark_* and is the in-process
@@ -190,13 +181,30 @@ class DiskStore:
             )
         return DiskStreamWriter(self.store_dir, self.session)
 
-    def write_scenarios(self, scenarios: list[Scenario]) -> None:
+    def write_scenarios(
+        self, scenarios: list[Scenario], config: RunConfiguration
+    ) -> None:
         """Record the full ensemble before dispatch.
 
-        Writes the authoritative ``scenarios.json`` and seeds the run set. Every
-        run starts PENDING (the RunRecord default, and absent from the status
-        log); terminal states are recorded in place as the sweep runs.
+        Writes ``store.json`` exclusively (failing if the directory already
+        holds one, so a new sweep never silently overwrites an existing
+        store), then the authoritative ``scenarios.json``, then seeds the run
+        set. Every run starts PENDING (the RunRecord default, and absent from
+        the status log); terminal states are recorded in place as the sweep
+        runs.
+
+        Provenance is derived from ``config.model_class`` — the model that
+        will actually execute these scenarios — rather than from a value
+        supplied separately at construction time, so recorded provenance can
+        never diverge from the config that actually ran.
         """
+        store_metadata.write_store_manifest(
+            self.store_dir,
+            session=self.session,
+            provenance=store_metadata.collect_provenance(
+                model_class=config.model_class
+            ),
+        )
         store_metadata.write_scenarios_manifest(self.store_dir, scenarios)
         for scenario in scenarios:
             run_id = RunId(scenario.scenario_id, scenario.replication_id)

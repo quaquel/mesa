@@ -218,7 +218,7 @@ def run_scenarios(
 
     scenarios = list(scenarios)
     writer = store.writer()
-    store.write_scenarios(scenarios)
+    store.write_scenarios(scenarios, config)
 
     def _bar(iterable):
         if not progress:
