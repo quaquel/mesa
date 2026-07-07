@@ -423,7 +423,9 @@ def test_run_configuration(mocker):
             self.data_recorder = dummy_recorder()
 
             # setting up the mock
-            self.data_recorder.get_table_dataframe.return_value = pd.DataFrame(columns=["x"])
+            self.data_recorder.get_table_dataframe.return_value = pd.DataFrame(
+                columns=["x"]
+            )
             self.data_recorder.get_all_dataframes.return_value = {
                 "a": pd.DataFrame(columns=["a"]),
                 "b": pd.DataFrame(columns=["b"]),
