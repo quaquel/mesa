@@ -97,7 +97,9 @@ class DiskStore:
             )
         self.store_dir = Path(store_dir)
         self.on_schema_conflict = on_schema_conflict
-        self.session: str | None = uuid.uuid4().hex[:12]  # unique token to identify a single session
+        self.session: str | None = uuid.uuid4().hex[
+            :12
+        ]  # unique token to identify a single session
 
         self.store_dir.mkdir(parents=True, exist_ok=True)
         (self.store_dir / "outputs").mkdir(exist_ok=True)
@@ -268,9 +270,7 @@ class DiskStore:
 
     def failed(self) -> dict[RunId, RunRecord]:
         """Return all failed runs."""
-        return {
-            rid: r for rid, r in self._records.items() if r.status == Status.FAILED
-        }
+        return {rid: r for rid, r in self._records.items() if r.status == Status.FAILED}
 
     def pending(self) -> dict[RunId, RunRecord]:
         """Return all pending runs."""

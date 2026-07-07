@@ -16,6 +16,7 @@ with the small root-written files that describe a parameter sweep:
                       can easily be identified.
 
 """
+
 from __future__ import annotations
 
 import inspect
@@ -122,6 +123,7 @@ def _mesa_version() -> str | None:
     """Private helper function which returns mesa version."""
     try:
         import mesa  # noqa: PLC0415
+
         return getattr(mesa, "__version__", None)
     except Exception:
         return None
@@ -153,12 +155,23 @@ def _model_git_provenance(model_class: type | None) -> dict[str, Any]:
     try:
         commit = subprocess.run(
             ["git", "rev-parse", "HEAD"],  # noqa: S607
-            cwd=repo, capture_output=True, text=True, timeout=5, check=True,
+            cwd=repo,
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=True,
         ).stdout.strip()
-        dirty = subprocess.run(
-            ["git", "status", "--porcelain"],  # noqa: S607
-            cwd=repo, capture_output=True, text=True, timeout=5, check=True,
-        ).stdout.strip() != ""
+        dirty = (
+            subprocess.run(
+                ["git", "status", "--porcelain"],  # noqa: S607
+                cwd=repo,
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=True,
+            ).stdout.strip()
+            != ""
+        )
         return {"commit": commit, "dirty": dirty, "source_path": source_file}
     except Exception:
         return {}
