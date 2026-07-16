@@ -20,6 +20,11 @@ worker's file distinct along every axis that can collide:
 Data is written where it is produced; only a key-only ``DiskReference`` crosses back
 to the root. That is the whole point of a worker-side writer.
 
+fixme: currently schema is created after the first succesfull run on each worker
+  these might however  diverge across workers, or if the first call returns an
+  empty frame, it might cause problems for subsequent runs. A future PR will
+  add an optional schema to RunConfiguration.
+
 Concurrency preconditions:
 
 - One single-threaded worker process per writer. The registry is a bare dict
@@ -64,7 +69,7 @@ _SAFE_OUTPUT_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 # Fixed for the lifetime of this worker process; computed once rather than on
 # every ``_file_for`` call.
 _HOST = socket.gethostname()
-_PID = os.getpid()
+_PID = os.getpid()  # fixme: might still be reused if a worker fails and in respawned.
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +237,8 @@ class DiskStreamWriter:
             self._check_schema(name, batch.schema)
 
         # --- all validated; now write ---
+        # fixme a write in this loop might fail, leaving partially written output
+        #   resume semantics should handle this explicitly
         for name, batch in batches.items():
             self._append(name, batch)
 
