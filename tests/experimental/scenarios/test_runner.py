@@ -5,7 +5,6 @@ from concurrent.futures import ProcessPoolExecutor
 
 import pandas as pd
 import pytest
-
 from conftest import (
     _ConditionalConfig,
     _ConditionalKillModel,
@@ -16,6 +15,7 @@ from conftest import (
     _RunFailModel,
     _WorkerKillModel,
 )
+
 from mesa import Model
 from mesa.experimental.data_collection import DataRecorder
 from mesa.experimental.scenarios import RunConfiguration, Scenario, run_scenarios
@@ -34,7 +34,9 @@ def test_run_configuration(mocker):
             self.data_recorder = dummy_recorder()
 
             # setting up the mock
-            self.data_recorder.get_table_dataframe.return_value = pd.DataFrame(columns=["a", "b"])
+            self.data_recorder.get_table_dataframe.return_value = pd.DataFrame(
+                columns=["a", "b"]
+            )
             self.data_recorder.get_all_dataframes.return_value = {
                 "a": pd.DataFrame(columns=["a", "b"]),
                 "b": pd.DataFrame(columns=["a", "b"]),

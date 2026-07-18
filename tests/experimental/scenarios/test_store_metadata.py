@@ -350,9 +350,7 @@ def test_read_status_corrupt_line_not_at_tail_raises(tmp_path):
     with path.open("w") as f:
         f.write("not valid json\n")
         f.write(
-            json.dumps(
-                {"scenario_id": 0, "replication_id": -1, "status": "SUCCEEDED"}
-            )
+            json.dumps({"scenario_id": 0, "replication_id": -1, "status": "SUCCEEDED"})
             + "\n"
         )
 
