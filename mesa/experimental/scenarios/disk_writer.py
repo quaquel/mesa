@@ -27,7 +27,7 @@ worker's file distinct along every axis that can collide:
 Data is written where it is produced; only a key-only ``DiskReference`` crosses back
 to the root. That is the whole point of a worker-side writer.
 
-fixme: currently schema is created after the first succesfull run on each worker
+fixme: currently schema is created after the first succesful run on each worker
   these might however  diverge across workers, or if the first call returns an
   empty frame, it might cause problems for subsequent runs. A future PR will
   add an optional schema to RunConfiguration.
