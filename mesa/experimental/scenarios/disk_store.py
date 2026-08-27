@@ -12,7 +12,7 @@ Layout::
     ├── status.log          # append-only, root-written, torn-tail-tolerant
     └── outputs/
         └── {output_name}/
-            └── worker-{session}-{host}-{pid}.arrow
+            └── worker-{session}-{host}-{uuid}.arrow
 
 Two construction paths:
 
@@ -89,6 +89,10 @@ class DiskStore:
                 differ across workers — ``"warn"`` unifies with null-fill and
                 warns, ``"raise"`` raises. Within-worker deviation is always an
                 error, caught earlier by the writer.
+
+        TODO: add option for user specified schema. If the model can return a zero-row output, it is advised to pass
+        the schema explicitly. A schema will be a list of column names and the associated datatype for each column.
+
         """
         if on_schema_conflict not in ("warn", "raise"):
             raise ValueError(
@@ -389,7 +393,7 @@ class DiskStore:
     def _unify(self, output_name: str, tables: list[pa.Table]) -> pa.Table:
         """Concatenate worker tables, reconciling schema differences.
 
-        Within a worker, schema is stable (enforced at write). Across workers it
+        Within a worker, schema is stable (enforced at write). Across workers, it
         can differ (a column present in some runs, absent in others).
         ``promote_options="permissive"`` unifies by null-filling absent columns.
         Under ``on_schema_conflict="raise"``, any cross-worker difference is an

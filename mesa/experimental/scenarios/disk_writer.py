@@ -7,11 +7,18 @@ in a module-level per-process registry. The worker PROCESS persists across
 jobs even though the writer OBJECT is reconstructed each task, so a stream
 opened on a worker's first run is reused by its later runs.
 
-The filename ``{output}/worker-{session}-{host}-{pid}.arrow`` keeps each
+The filename ``{output}/worker-{session}-{host}-{uuid}.arrow`` keeps each
 worker's file distinct along every axis that can collide:
-  - ``pid``      distinguishes workers within one node;
-  - ``host``     distinguishes workers across nodes (pid spaces are per-node,
-                 so two nodes can share a pid — relevant once PR 6 adds MPI);
+  - ``uuid``     a token minted once per worker process, at module-import
+                 time, and cached for that process's lifetime. Unlike a pid
+                 it never collides — not across processes, not across nodes,
+                 not across time — so on its own it already guarantees
+                 uniqueness;
+  - ``host``     not needed for uniqueness now that the uuid provides it, but
+                 kept alongside it so a file can still be eyeballed to the
+                 node that produced it — an opaque uuid can't be read that
+                 way the way a pid once could. Useful once PR 6 adds MPI
+                 across nodes;
   - ``session``  distinguishes invocations (resume) — an Arrow IPC
                  stream cannot be reopened once its end-of-stream marker is
                  written, so a resumed sweep opens NEW files rather than
@@ -29,11 +36,12 @@ Concurrency preconditions:
 
 - One single-threaded worker process per writer. The registry is a bare dict
   with NO lock. A thread-backed executor (``ThreadPoolExecutor``) would
-  violate this — all threads share one pid, hence one set of registry
-  entries and one file per output, and interleaved ``write_batch`` calls
-  would corrupt the IPC streams *silently* (no exception, unreadable file).
-  To support threaded workers, restore a lock guarding every registry access
-  below and give each thread its own stream key.
+  violate this — all threads share one process, and hence one module-level
+  uuid, hence one set of registry entries and one file per output, and
+  interleaved ``write_batch`` calls would corrupt the IPC streams *silently*
+  (no exception, unreadable file). To support threaded workers, restore a
+  lock guarding every registry access below and give each thread its own
+  stream key.
 - ``run_scenarios`` is blocking, so a worker only ever serves one session at
   a time. Sessions can change either due to a resume or due to a second call
   to ``run_scenarios``.
@@ -45,6 +53,7 @@ import atexit
 import os
 import re
 import socket
+import uuid
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -69,7 +78,7 @@ _SAFE_OUTPUT_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 # Fixed for the lifetime of this worker process; computed once rather than on
 # every ``_file_for`` call.
 _HOST = socket.gethostname()
-_PID = os.getpid()  # fixme: might still be reused if a worker fails and in respawned.
+_UUID = uuid.uuid4().hex
 
 
 # ---------------------------------------------------------------------------
@@ -192,7 +201,7 @@ class DiskStreamWriter:
 
     def _file_for(self, output_name: str) -> Path:
         """Path to this worker's Arrow file for a named output."""
-        filename = f"worker-{self.session}-{_HOST}-{_PID}.arrow"
+        filename = f"worker-{self.session}-{_HOST}-{_UUID}.arrow"
         return self.store_dir / "outputs" / output_name / filename
 
     def to_reference(
