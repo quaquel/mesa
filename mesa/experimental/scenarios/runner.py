@@ -132,8 +132,6 @@ class RunConfiguration:
         # columns has nothing to persist. Caught here as EXTRACTING (not later as a
         # write error) because it is a statement about what extraction produced, not
         # about writing. A columned zero-row frame is valid and passes.
-        # fixme will be replaced/expanded with an optional schema option so we can
-        #   validate against a schema
         for name, frame in output.items():
             if frame.shape[1] == 0:
                 raise OutcomeExtractionException(
