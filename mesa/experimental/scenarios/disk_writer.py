@@ -110,6 +110,17 @@ _RESERVED_IDENTITY_COLUMNS = frozenset(_IDENTITY_SCHEMA.names)
 _HOST = socket.gethostname()
 _UUID = uuid.uuid4().hex
 
+# Every worker process gets its own copy of pyarrow's default-sized thread
+# pools sized by the number of cores pyarrow detects on the node. Under a
+# multi-worker executor, N worker processes each defaulting to a multi-thread
+# pool oversubscribes the node (N workers x M threads each, competing for far
+# fewer physical cores) for only a marginal benefit. The pool only wakes up
+# for the per-run _to_batch conversion, parallelized across columns, and most
+# outcome frames are small enough (a handful of tracked columns) that a larger
+# pool would go mostly unused even then. Moreover, run time of a simulation
+# is likely substantially longer than any conversion at the end.
+pa.set_cpu_count(1)
+pa.set_io_thread_count(1)
 
 def _validate_schemas(schemas: dict[str, pa.Schema]) -> None:
     """Reject any output schema that declares a reserved identity column.
