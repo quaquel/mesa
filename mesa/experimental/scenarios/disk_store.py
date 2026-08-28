@@ -48,7 +48,7 @@ import pyarrow.compute as pc
 import pyarrow.ipc as pa_ipc
 
 from mesa.experimental.scenarios import store_metadata
-from mesa.experimental.scenarios.disk_writer import DiskStreamWriter
+from mesa.experimental.scenarios.disk_writer import DiskStreamWriter, _validate_schemas
 from mesa.experimental.scenarios.exceptions import (
     ScenarioAbortedException,
     ScenarioFailedException,
@@ -73,6 +73,7 @@ class DiskStore:
         self,
         store_dir: str | Path,
         *,
+        schemas: dict[str, pa.Schema] | None = None,
         on_schema_conflict: str = "warn",
     ):
         """Create a new store rooted at ``store_dir``.
@@ -89,9 +90,20 @@ class DiskStore:
                 differ across workers — ``"warn"`` unifies with null-fill and
                 warns, ``"raise"`` raises. Within-worker deviation is always an
                 error, caught earlier by the writer.
+            schemas: optional per-output Arrow schema, keyed by output name.
+                Passed straight through to every ``DiskStreamWriter`` (see its
+                ``schemas`` parameter). If passed, this will be used instead
+                of inferring it from whichever run happens to write it first on
+                a given worker — needed as soon as a run can return a zero-row
+                frame for that output, since an empty column's inferred type
+                does not reliably match the type inferred from a later non-empty
+                batch of the same output.
 
-        TODO: add option for user specified schema. If the model can return a zero-row output, it is advised to pass
-        the schema explicitly. A schema will be a list of column names and the associated datatype for each column.
+        Raises:
+            ValueError: if ``on_schema_conflict`` is invalid, or if any
+                schema in ``schemas`` declares a reserved identity column
+                (``scenario_id`` or ``replication_id`` — see
+                ``disk_writer._validate_schemas``).
 
         """
         if on_schema_conflict not in ("warn", "raise"):
@@ -101,6 +113,8 @@ class DiskStore:
             )
         self.store_dir = Path(store_dir)
         self.on_schema_conflict = on_schema_conflict
+        self.schemas = schemas or {}
+        _validate_schemas(self.schemas)
         self.session: str | None = uuid.uuid4().hex[
             :12
         ]  # unique token to identify a single session
@@ -178,14 +192,21 @@ class DiskStore:
     # -- write side ----------------------------------------------------------
 
     def writer(self) -> DiskStreamWriter:
-        """Return the per-job-pickleable, write-only handle for workers."""
+        """Return the per-job-pickleable, write-only handle for workers.
+
+        ``schemas`` is passed through already-validated (at ``__init__``);
+        ``DiskStreamWriter`` validates it again itself — redundant on this
+        path, but that class is also constructed directly in isolation by
+        tests, where the same check needs to run without going through a
+        ``DiskStore`` at all.
+        """
         if self.session is None:
             raise RuntimeError(
                 "this DiskStore has no active session (it was loaded via "
                 "from_directory, which is read-only); resuming a sweep is "
                 "not yet supported, so writer() is unavailable"
             )
-        return DiskStreamWriter(self.store_dir, self.session)
+        return DiskStreamWriter(self.store_dir, self.session, schemas=self.schemas)
 
     def write_scenarios(
         self, scenarios: list[Scenario], config: RunConfiguration

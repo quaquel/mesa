@@ -27,10 +27,28 @@ worker's file distinct along every axis that can collide:
 Data is written where it is produced; only a key-only ``DiskReference`` crosses back
 to the root. That is the whole point of a worker-side writer.
 
-fixme: currently schema is created after the first successful run on each worker
-  these might however  diverge across workers, or if the first call returns an
-  empty frame, it might cause problems for subsequent runs. A future PR will
-  add an optional schema to RunConfiguration.
+An output's schema is normally inferred from the first batch a worker writes
+for it — fine as long as every run's frame for that output infers the same
+Arrow types. A run that returns a zero-row frame breaks this: an empty
+column's inferred type doesn't reliably match the type inferred from a later
+non-empty batch of the same output, so whichever run happens to write first
+fixes a schema the next run's batch may not satisfy (a spurious per-run
+WRITING failure). ``DiskStreamWriter``'s optional ``schemas`` parameter
+(normally supplied via ``DiskStore(schemas=...)``, which is the only
+construction path a user should go through — see ``_validate_schemas``)
+sidesteps this: a user-supplied schema is fixed up front, independent of
+write order. Outputs with no explicit schema keep the infer-from-first-batch
+behavior and remain exposed to this corner case.
+
+For an output with an explicit schema, ``_to_batch`` also reconciles the
+frame's actual columns against it before ever calling into pyarrow's own
+conversion: a frame missing a declared column is a hard ``WRITING`` failure,
+while an undeclared extra column is dropped with a warning (schema is
+authoritative). This is a deliberate design choice, not a fallback — it
+means the frame handed to pyarrow always matches the declared schema
+exactly, so pyarrow's own schema-mismatch error behavior (which may differ
+across pyarrow versions and was not something this module wanted to depend
+on) is never exercised.
 
 Concurrency preconditions:
 
@@ -50,9 +68,11 @@ Concurrency preconditions:
 from __future__ import annotations
 
 import atexit
+import os
 import re
 import socket
 import uuid
+import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -74,10 +94,50 @@ if TYPE_CHECKING:
 # Leading dot disallowed (no hidden dirs, no "." / ".."); dot/dash allowed after.
 _SAFE_OUTPUT_NAME = re.compile(r"[A-Za-z0-9_][A-Za-z0-9_.-]*$")
 
+# Appended to every output's batch regardless of whether that output has an
+# explicit user schema (see DiskStreamWriter.schemas): identity columns are
+# this module's doing, not the model's, so callers never specify them.
+# int64 to match what pyarrow already infers today from frame.assign()'s
+# plain python ints — this constant must not silently change that dtype for
+# outputs that have no explicit schema.
+_IDENTITY_SCHEMA = pa.schema(
+    [pa.field("scenario_id", pa.int64()), pa.field("replication_id", pa.int64())]
+)
+_RESERVED_IDENTITY_COLUMNS = frozenset(_IDENTITY_SCHEMA.names)
+
 # Fixed for the lifetime of this worker process; computed once rather than on
 # every ``_file_for`` call.
 _HOST = socket.gethostname()
 _UUID = uuid.uuid4().hex
+
+
+def _validate_schemas(schemas: dict[str, pa.Schema]) -> None:
+    """Reject any output schema that declares a reserved identity column.
+
+    Shared by ``DiskStore.__init__`` (the fail-fast path for real users, who
+    only ever construct a ``DiskStore``) and ``DiskStreamWriter.__init__``
+    (a safety net for tests that construct a writer in isolation, bypassing
+    ``DiskStore`` entirely). Defined once, here, so the two call sites can
+    never validate against a different set of reserved names than each other.
+
+    Args:
+        schemas: per-output Arrow schema, keyed by output name, as passed to
+            either constructor's ``schemas`` parameter.
+
+    Raises:
+        ValueError: if any schema declares ``scenario_id`` or
+            ``replication_id`` itself — both are appended automatically and
+            must not appear in a user-supplied schema.
+    """
+    for name, schema in schemas.items():
+        reserved = set(schema.names) & _RESERVED_IDENTITY_COLUMNS
+        if reserved:
+            raise ValueError(
+                f"schema for output {name!r} declares reserved identity "
+                f"column(s) {sorted(reserved)}; these are appended "
+                "automatically and must not appear in a user-supplied "
+                "schema"
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -180,13 +240,26 @@ class DiskReference:
 class DiskStreamWriter:
     """Stateless, per-job-pickleable handle that appends run outcomes to disk.
 
-    Carries only configuration — the store directory and the session token.
-    All mutable state (open streams, fixed schemas) lives in the module-level
-    registry, keyed per output and per worker process. Constructed by
-    ``DiskStore.writer()`` and re-pickled with every job.
+    Carries only configuration — the store directory, the session token, and
+    an optional per-output schema map. All mutable state (open streams, fixed
+    schemas) lives in the module-level registry, keyed per output and per
+    worker process. Constructed by ``DiskStore.writer()`` and re-pickled with
+    every job.
+
+    Normally reached only via ``DiskStore.writer()``, which validates
+    ``schemas`` once at ``DiskStore`` construction time. This class validates
+    it again in its own ``__init__`` — redundant on that normal path, but
+    this class is also constructed directly and in isolation by tests, and
+    a bad ``schemas`` dict should fail right there rather than surface later,
+    confusingly, from inside ``_to_batch``.
     """
 
-    def __init__(self, store_dir: Path, session: str):
+    def __init__(
+        self,
+        store_dir: Path,
+        session: str,
+        schemas: dict[str, pa.Schema] | None = None,
+    ):
         """Initialize the writer.
 
         Args:
@@ -194,9 +267,26 @@ class DiskStreamWriter:
                 holds one subdirectory per named output.
             session: token of the current invocation, minted by the root and
                 embedded in every file this writer opens.
+            schemas: optional per-output Arrow schema, keyed by output name,
+                describing that output's columns exactly as returned by
+                ``extract_output`` — identity columns are appended
+                automatically and must not appear here. When present for an
+                output, its stream is fixed to this schema (plus identity
+                columns) on first open, instead of inferring one from the
+                first batch written — see ``_to_batch``. A frame missing a
+                declared column is a hard failure; a frame with an extra,
+                undeclared column is warned about once and the column
+                dropped (schema is authoritative). Outputs absent here keep
+                the existing infer-from-first-batch behavior.
+
+        Raises:
+            ValueError: if any schema in ``schemas`` declares a reserved
+                identity column — see ``_validate_schemas``.
         """
         self.store_dir = Path(store_dir)
         self.session = session
+        self.schemas = schemas or {}
+        _validate_schemas(self.schemas)
 
     def _file_for(self, output_name: str) -> Path:
         """Path to this worker's Arrow file for a named output."""
@@ -267,6 +357,80 @@ class DiskStreamWriter:
                 "separators, no leading dot)"
             )
 
+    def _full_schema(self, name: str) -> pa.Schema | None:
+        """This output's fixed schema (user schema + identity columns), or None.
+
+        None means no explicit schema was supplied for ``name``: pyarrow
+        infers the batch's schema from the frame instead, and the first
+        batch a worker writes for this output fixes it going forward
+        (existing ``_check_schema``/registry behavior, unchanged).
+        """
+        user_schema = self.schemas.get(name)
+        if user_schema is None:
+            return None
+        return pa.schema(list(user_schema) + list(_IDENTITY_SCHEMA))
+
+    @staticmethod
+    def _conform_to_schema(
+        name: str, user_schema: pa.Schema, frame: pd.DataFrame
+    ) -> pd.DataFrame:
+        """Reconcile a frame's columns against its declared user schema.
+
+        Compares column names only (types are handled by ``from_pandas``
+        itself once the columns line up — a present-but-wrong-type column is
+        still caught there, by the existing except clause in ``_to_batch``).
+        Runs before identity columns are attached, so ``user_schema`` here is
+        the declared schema alone, not ``_full_schema``'s identity-appended
+        version — identity columns are always added afterward and are never
+        something the frame is expected to already carry.
+
+        Args:
+            name: output name, for error/warning messages.
+            user_schema: this output's declared schema, as supplied by the
+                caller (not yet identity-appended).
+            frame: the extracted output frame, as returned by
+                ``extract_output``.
+
+        Returns:
+            ``frame``, unchanged if its columns already match ``user_schema``
+            exactly; otherwise a copy with extra columns dropped.
+
+        Raises:
+            ValueError: if the frame is missing any column ``user_schema``
+                declares. A missing column is always a hard failure — unlike
+                an extra column, there is no reasonable value to fill in for
+                a required column, so silently proceeding would produce a
+                batch that doesn't match its own declared schema.
+        """
+        declared = set(user_schema.names)
+        present = set(frame.columns)
+
+        missing = declared - present
+        if missing:
+            raise ValueError(
+                f"output {name!r} is missing column(s) {sorted(missing)} "
+                "required by its declared schema"
+            )
+
+        extra = present - declared
+        if extra:
+            # Message deliberately excludes run_id: warnings.warn's registry
+            # dedups per process by (message, category, lineno), so a static
+            # message means each worker warns at most once per output per
+            # distinct extra-column set, not once per run. A true sweep-wide
+            # single warning would need workers to coordinate back to the
+            # root, which is more machinery than a courtesy message
+            # justifies.
+            warnings.warn(
+                f"output {name!r} has column(s) {sorted(extra)} not in its "
+                "declared schema; dropping them (schema is authoritative)",
+                UserWarning,
+                stacklevel=3,
+            )
+            frame = frame[list(user_schema.names)]
+
+        return frame
+
     def _to_batch(
         self, run_id: RunId, name: str, frame: pd.DataFrame
     ) -> pa.RecordBatch:
@@ -274,22 +438,48 @@ class DiskStreamWriter:
 
         Extraction has already guaranteed the frame has columns (a columnless
         frame is an ``EXTRACTING`` failure in ``RunConfiguration``), so this is
-        purely a write concern: attach identity columns and convert. A columned
-        zero-row frame is valid — the resulting zero-row batch preserves the
-        schema. A frame that will not convert to Arrow raises here (re-wrapped
-        for a clearer message than pyarrow's raw error) and is recorded as a
-        ``WRITING`` failure by the worker-side ``_safe_call``.
+        purely a write concern: reconcile against any declared schema, attach
+        identity columns, and convert. A columned zero-row frame is valid —
+        the resulting zero-row batch preserves the schema. A frame that will
+        not convert to Arrow raises here (re-wrapped for a clearer message
+        than pyarrow's raw error) and is recorded as a ``WRITING`` failure by
+        the worker-side ``_safe_call``.
+
+        If an explicit schema was supplied for ``name``, the frame's columns
+        are reconciled against it first via ``_conform_to_schema`` — a
+        missing declared column raises, an extra undeclared column is warned
+        about once and dropped. This runs before pyarrow ever sees the frame,
+        so the batch handed to ``from_pandas`` always has exactly the
+        declared columns; pyarrow's own behavior for a schema/frame mismatch
+        (which was not confirmed for every case, and may differ across
+        pyarrow versions) is deliberately never exercised.
 
         Identity columns are attached via ``assign``, which shallow-copies the
         frame and only allocates the two new columns — the caller's frame is
         left untouched without paying to deep-copy its existing data. The
         scalars broadcast across the frame's row count, including zero rows.
+
+        For a schema'd output, the batch is then built against the full
+        schema (user columns + identity columns) directly rather than left to
+        pyarrow's inference: this casts the frame's columns to the declared
+        types. ``safe=True`` is passed explicitly (pyarrow's own default, but
+        pinned here rather than left implicit) so an unsafe cast — e.g.
+        float64 to a declared int32 that would lose precision — raises rather
+        than silently truncating. This is what removes the
+        empty-vs-populated-frame schema-mismatch corner case for that output
+        — see the ``schemas`` parameter on ``__init__``.
         """
+        user_schema = self.schemas.get(name)
+        if user_schema is not None:
+            frame = self._conform_to_schema(name, user_schema, frame)
+
         frame = frame.assign(
             scenario_id=run_id.scenario_id, replication_id=run_id.replication_id
         )
         try:
-            return pa.RecordBatch.from_pandas(frame, preserve_index=False)
+            return pa.RecordBatch.from_pandas(
+                frame, schema=self._full_schema(name), preserve_index=False, safe=True
+            )
         except (pa.ArrowInvalid, pa.ArrowTypeError, pa.ArrowNotImplementedError) as e:
             raise ValueError(
                 f"output {name!r} for {run_id} is not Arrow-convertible: {e}"
@@ -303,6 +493,16 @@ class DiskStreamWriter:
         deviation is not checked here — it is reconciled by the reader
         (unify + null-fill + warn). A not-yet-opened output passes: its schema
         is fixed when ``_append`` opens the stream.
+
+        For an output with an explicit user schema, every batch already
+        carries that identical fixed schema (``_to_batch``/``_full_schema``
+        return the same schema object shape on every call for a given
+        output, and ``_conform_to_schema`` guarantees the frame's columns
+        match it before conversion), so this check never fires for it in
+        practice. It stays in the write path unconditionally rather than
+        being skipped for schema'd outputs, so a future change to
+        ``_full_schema`` that made it derive something per-call would still
+        be caught here instead of silently writing an inconsistent stream.
         """
         fixed = _SCHEMAS.get((self.session, name))
         if fixed is not None and not schema.equals(fixed):
