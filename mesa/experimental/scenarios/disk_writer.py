@@ -68,7 +68,6 @@ Concurrency preconditions:
 from __future__ import annotations
 
 import atexit
-import os
 import re
 import socket
 import uuid
