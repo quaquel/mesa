@@ -121,6 +121,7 @@ _UUID = uuid.uuid4().hex
 pa.set_cpu_count(1)
 pa.set_io_thread_count(1)
 
+
 def _validate_schemas(schemas: dict[str, pa.Schema]) -> None:
     """Reject any output schema that declares a reserved identity column.
 
