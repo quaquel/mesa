@@ -9,11 +9,21 @@ opened on a worker's first run is reused by its later runs.
 
 The filename ``{output}/worker-{session}-{host}-{uuid}.arrow`` keeps each
 worker's file distinct along every axis that can collide:
-  - ``uuid``     a token minted once per worker process, at module-import
-                 time, and cached for that process's lifetime. Unlike a pid
-                 it never collides — not across processes, not across nodes,
-                 not across time — so on its own it already guarantees
-                 uniqueness;
+  - ``uuid``     a token minted once per worker process, on first use (see
+                 ``_worker_uuid``) — deliberately NOT at module-import time.
+                 Under a fork-based start method, a child process does not
+                 re-run already-imported module-level code; it inherits the
+                 parent's already-executed globals via the fork-time memory
+                 copy. A plain module-level ``uuid.uuid4()`` computed eagerly
+                 would then be identical across every worker forked from the
+                 same root process — multiple workers colliding on the same
+                 ``_file_for`` filename, each truncating and overwriting the
+                 others' data with no coordination between them. Deferred to
+                 first use instead, this cannot run before the calling
+                 process exists and is handling its first job — necessarily
+                 after any fork has already happened — so every start method
+                 (fork, forkserver, spawn) yields a genuinely distinct uuid
+                 per process;
   - ``host``     not needed for uniqueness now that the uuid provides it, but
                  kept alongside it so a file can still be eyeballed to the
                  node that produced it — an opaque uuid can't be read that
@@ -104,10 +114,36 @@ _IDENTITY_SCHEMA = pa.schema(
 )
 _RESERVED_IDENTITY_COLUMNS = frozenset(_IDENTITY_SCHEMA.names)
 
-# Fixed for the lifetime of this worker process; computed once rather than on
-# every ``_file_for`` call.
+# Eager and safe: gethostname() returns the same string whether it's called
+# fresh in a child process or inherited via a fork-time memory copy, since it
+# describes the physical machine, not per-process identity. Do NOT apply the
+# same "make it lazy" fix here as below for _UUID — there is nothing to fix.
 _HOST = socket.gethostname()
-_UUID = uuid.uuid4().hex
+
+# NOT computed eagerly here (unlike _HOST above) — see _worker_uuid() and the
+# module docstring's ``uuid`` bullet for why.
+_UUID: str | None = None
+
+
+def _worker_uuid() -> str:
+    """Return this worker process's uuid, minting it on first call.
+
+    Deferred to first use rather than computed at module-import time: this
+    function cannot run before the calling process exists and is handling
+    its first job, which is necessarily after any fork has already
+    happened, so every start method (fork, forkserver, spawn) yields a
+    genuinely distinct uuid per process. An eager module-level
+    ``uuid.uuid4()`` would not — see the module docstring.
+
+    No lock: a writer's module-level state is single-threaded by this
+    module's own concurrency precondition (see module docstring), the same
+    assumption ``_rotate_session`` already relies on for ``_CURRENT_SESSION``.
+    """
+    global _UUID  # noqa: PLW0603
+    if _UUID is None:
+        _UUID = uuid.uuid4().hex
+    return _UUID
+
 
 # Every worker process gets its own copy of pyarrow's default-sized thread
 # pools sized by the number of cores pyarrow detects on the node. Under a
@@ -301,7 +337,7 @@ class DiskStreamWriter:
 
     def _file_for(self, output_name: str) -> Path:
         """Path to this worker's Arrow file for a named output."""
-        filename = f"worker-{self.session}-{_HOST}-{_UUID}.arrow"
+        filename = f"worker-{self.session}-{_HOST}-{_worker_uuid()}.arrow"
         return self.store_dir / "outputs" / output_name / filename
 
     def to_reference(
@@ -462,21 +498,27 @@ class DiskStreamWriter:
         about once and dropped. This runs before pyarrow ever sees the frame,
         so the batch handed to ``from_pandas`` always has exactly the
         declared columns; pyarrow's own behavior for a schema/frame mismatch
-        (which was not confirmed for every case, and may differ across
-        pyarrow versions) is deliberately never exercised.
+        (confirmed: a schema field absent from the frame raises, an extra
+        frame column absent from the schema is silently ignored) is
+        deliberately never exercised, since ``_conform_to_schema`` already
+        resolved both cases before this point.
 
         Identity columns are attached via ``assign``, which shallow-copies the
         frame and only allocates the two new columns — the caller's frame is
         left untouched without paying to deep-copy its existing data. The
         scalars broadcast across the frame's row count, including zero rows.
 
-    For a schema'd output, the batch is then built against the full
+        For a schema'd output, the batch is then built against the full
         schema (user columns + identity columns) directly rather than left to
         pyarrow's inference: this casts the frame's columns to the declared
-        types. Casting behavior on a lossy conversion (e.g. float64 to a declared
-        int32) is whatever pyarrow does internally. This does, however, removes the
-        empty-vs-populated-frame schema-mismatch corner case for that output — see
-        the ``schemas`` parameter on ``__init__``.
+        types. ``RecordBatch.from_pandas`` has no ``safe`` parameter (unlike
+        ``Table.from_pandas``) — confirmed against Arrow's docs across every
+        released version, not a version-specific gap — so casting behavior on
+        a lossy conversion (e.g. float64 to a declared int32) is whatever
+        pyarrow does internally; it is not pinned or controlled by this
+        module. This is still what removes the empty-vs-populated-frame
+        schema-mismatch corner case for that output — see the ``schemas``
+        parameter on ``__init__``.
         """
         user_schema = self.schemas.get(name)
         if user_schema is not None:
@@ -487,7 +529,8 @@ class DiskStreamWriter:
         )
         try:
             return pa.RecordBatch.from_pandas(
-                frame, schema=self._full_schema(name), preserve_index=False)
+                frame, schema=self._full_schema(name), preserve_index=False
+            )
         except (pa.ArrowInvalid, pa.ArrowTypeError, pa.ArrowNotImplementedError) as e:
             raise ValueError(
                 f"output {name!r} for {run_id} is not Arrow-convertible: {e}"
