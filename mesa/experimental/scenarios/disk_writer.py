@@ -470,7 +470,7 @@ class DiskStreamWriter:
         left untouched without paying to deep-copy its existing data. The
         scalars broadcast across the frame's row count, including zero rows.
 
-    For a schema'd output, the batch is then built against the full
+        For a schema'd output, the batch is then built against the full
         schema (user columns + identity columns) directly rather than left to
         pyarrow's inference: this casts the frame's columns to the declared
         types. Casting behavior on a lossy conversion (e.g. float64 to a declared
@@ -487,7 +487,8 @@ class DiskStreamWriter:
         )
         try:
             return pa.RecordBatch.from_pandas(
-                frame, schema=self._full_schema(name), preserve_index=False)
+                frame, schema=self._full_schema(name), preserve_index=False
+            )
         except (pa.ArrowInvalid, pa.ArrowTypeError, pa.ArrowNotImplementedError) as e:
             raise ValueError(
                 f"output {name!r} for {run_id} is not Arrow-convertible: {e}"

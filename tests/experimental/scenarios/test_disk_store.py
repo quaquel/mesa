@@ -37,7 +37,10 @@ def _write_worker_file(directory: Path, filename: str, table: pa.Table) -> None:
     """
     directory.mkdir(parents=True, exist_ok=True)
     path = directory / filename
-    with pa.OSFile(str(path), "wb") as sink, pa.ipc.new_stream(sink, table.schema) as ipc_writer:
+    with (
+        pa.OSFile(str(path), "wb") as sink,
+        pa.ipc.new_stream(sink, table.schema) as ipc_writer,
+    ):
         ipc_writer.write_table(table)
 
 
