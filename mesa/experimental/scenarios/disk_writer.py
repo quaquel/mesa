@@ -9,21 +9,27 @@ opened on a worker's first run is reused by its later runs.
 
 The filename ``{output}/worker-{session}-{host}-{uuid}.arrow`` keeps each
 worker's file distinct along every axis that can collide:
-  - ``uuid``     a token minted once per worker process, on first use (see
-                 ``_worker_uuid``) — deliberately NOT at module-import time.
-                 Under a fork-based start method, a child process does not
-                 re-run already-imported module-level code; it inherits the
-                 parent's already-executed globals via the fork-time memory
-                 copy. A plain module-level ``uuid.uuid4()`` computed eagerly
-                 would then be identical across every worker forked from the
-                 same root process — multiple workers colliding on the same
-                 ``_file_for`` filename, each truncating and overwriting the
-                 others' data with no coordination between them. Deferred to
-                 first use instead, this cannot run before the calling
-                 process exists and is handling its first job — necessarily
-                 after any fork has already happened — so every start method
-                 (fork, forkserver, spawn) yields a genuinely distinct uuid
-                 per process;
+  - ``uuid``     a token minted once per ``DiskStreamWriter`` INSTANCE, on
+                 first use inside ``_file_for`` (see ``_instance_uuid``) —
+                 stored on the instance, not the module. A module-level
+                 value, even computed lazily, is not enough: if the SAME
+                 process that later forks workers had already itself
+                 written a batch (e.g. an earlier sequential/in-process run
+                 reusing the same store before a parallel one), that
+                 process's cached value would already be set before any
+                 fork happens, and every forked child would inherit that
+                 identical cached value via the fork-time memory copy — the
+                 exact collision this token exists to prevent. An instance
+                 attribute sidesteps this entirely: this class is re-pickled
+                 and independently unpickled for every job (see the opening
+                 paragraph above), and unpickling always produces a
+                 genuinely new object with its own ``None`` ``_uuid``, never
+                 a shared reference to whatever writer computed one before
+                 it — so there is nothing left for a fork (or any other
+                 process) to duplicate. Must stay ``None`` until first
+                 actually needed; setting it eagerly in ``__init__`` would
+                 bake one value into every pickled copy, reproducing the
+                 identical collision without even requiring a fork to do it;
   - ``host``     not needed for uniqueness now that the uuid provides it, but
                  kept alongside it so a file can still be eyeballed to the
                  node that produced it — an opaque uuid can't be read that
@@ -36,6 +42,26 @@ worker's file distinct along every axis that can collide:
 
 Data is written where it is produced; only a key-only ``DiskReference`` crosses back
 to the root. That is the whole point of a worker-side writer.
+
+The module-level stream registry (``_STREAMS``/``_SINKS``/``_SCHEMAS`` below)
+has the same fork hazard as the uuid above, from a different angle: if the
+process that later forks workers had already opened real streams itself (the
+same already-written-before-forking scenario the per-instance uuid guards
+against), every forked child would inherit those entries as already
+satisfying ``key in _STREAMS`` — skipping ``_open_stream`` entirely and
+writing straight into a stream object whose underlying OS file descriptor is
+now shared, unmediated, with the parent process (and any sibling that
+inherited the same entry), corrupting the file for everyone. ``_rotate_session``
+guards against this by comparing ``os.getpid()`` against ``_REGISTRY_PID``
+(module-level, tracking whichever process last legitimately wrote the
+registry) on every call: a mismatch means this process did not write what it
+just inherited, so every entry is discarded — via
+``_discard_inherited_registry``, which deliberately does NOT call
+``.close()`` on any of them: closing writes an Arrow IPC end-of-stream
+marker, and doing that to a file this process does not actually own (and may
+still be legitimately open elsewhere) would corrupt it for whoever does. The
+same guard covers process-exit cleanup in ``_close_all_streams``, for a
+worker that was forked but never itself wrote anything before exiting.
 
 An output's schema is normally inferred from the first batch a worker writes
 for it — fine as long as every run's frame for that output infers the same
@@ -64,12 +90,15 @@ Concurrency preconditions:
 
 - One single-threaded worker process per writer. The registry is a bare dict
   with NO lock. A thread-backed executor (``ThreadPoolExecutor``) would
-  violate this — all threads share one process, and hence one module-level
-  uuid, hence one set of registry entries and one file per output, and
-  interleaved ``write_batch`` calls would corrupt the IPC streams *silently*
-  (no exception, unreadable file). To support threaded workers, restore a
-  lock guarding every registry access below and give each thread its own
-  stream key.
+  violate this — threads share one process and, since threads (unlike
+  process-pool workers) share Python objects directly rather than each
+  getting an independently unpickled copy, would share the exact same
+  writer instance and hence the exact same ``_uuid`` and registry entries,
+  all ending up writing into one file per output. Interleaved
+  ``write_batch`` calls would corrupt the IPC streams *silently* (no
+  exception, unreadable file). To support threaded workers, restore a lock
+  guarding every registry access below and give each thread its own stream
+  key.
 - ``run_scenarios`` is blocking, so a worker only ever serves one session at
   a time. Sessions can change either due to a resume or due to a second call
   to ``run_scenarios``.
@@ -78,6 +107,7 @@ Concurrency preconditions:
 from __future__ import annotations
 
 import atexit
+import os
 import re
 import socket
 import uuid
@@ -117,45 +147,12 @@ _RESERVED_IDENTITY_COLUMNS = frozenset(_IDENTITY_SCHEMA.names)
 # Eager and safe: gethostname() returns the same string whether it's called
 # fresh in a child process or inherited via a fork-time memory copy, since it
 # describes the physical machine, not per-process identity. Do NOT apply the
-# same "make it lazy" fix here as below for _UUID — there is nothing to fix.
+# same "make it lazy/instance-scoped" fix here that _uuid needed below —
+# there is nothing to fix.
 _HOST = socket.gethostname()
 
-# NOT computed eagerly here (unlike _HOST above) — see _worker_uuid() and the
-# module docstring's ``uuid`` bullet for why.
-_UUID: str | None = None
-
-
-def _worker_uuid() -> str:
-    """Return this worker process's uuid, minting it on first call.
-
-    Deferred to first use rather than computed at module-import time: this
-    function cannot run before the calling process exists and is handling
-    its first job, which is necessarily after any fork has already
-    happened, so every start method (fork, forkserver, spawn) yields a
-    genuinely distinct uuid per process. An eager module-level
-    ``uuid.uuid4()`` would not — see the module docstring.
-
-    No lock: a writer's module-level state is single-threaded by this
-    module's own concurrency precondition (see module docstring), the same
-    assumption ``_rotate_session`` already relies on for ``_CURRENT_SESSION``.
-    """
-    global _UUID  # noqa: PLW0603
-    if _UUID is None:
-        _UUID = uuid.uuid4().hex
-    return _UUID
-
-
-# Every worker process gets its own copy of pyarrow's default-sized thread
-# pools sized by the number of cores pyarrow detects on the node. Under a
-# multi-worker executor, N worker processes each defaulting to a multi-thread
-# pool oversubscribes the node (N workers x M threads each, competing for far
-# fewer physical cores) for only a marginal benefit. The pool only wakes up
-# for the per-run _to_batch conversion, parallelized across columns, and most
-# outcome frames are small enough (a handful of tracked columns) that a larger
-# pool would go mostly unused even then. Moreover, run time of a simulation
-# is likely substantially longer than any conversion at the end.
-pa.set_cpu_count(1)
-pa.set_io_thread_count(1)
+# NOT a module-level uuid — see the module docstring's ``uuid`` bullet.
+# _instance_uuid() on DiskStreamWriter is where this actually lives now.
 
 
 def _validate_schemas(schemas: dict[str, pa.Schema]) -> None:
@@ -213,16 +210,49 @@ _SCHEMAS: dict[_StreamKey, pa.Schema] = {}
 # session is finished on this worker and its streams can be closed.
 _CURRENT_SESSION: str | None = None
 
+# pid of whichever process last legitimately wrote the registry above — i.e.
+# last ran _rotate_session to completion IN that process, as opposed to
+# merely inheriting these dicts via a fork's memory copy. Compared against
+# os.getpid() on every write and at process exit; see _rotate_session,
+# _close_all_streams, and the module docstring's paragraph on the registry's
+# own fork hazard.
+_REGISTRY_PID: int | None = None
+
+
+def _discard_inherited_registry() -> None:
+    """Drop every registry entry without closing any of it.
+
+    Used when this process's identity doesn't match whichever process last
+    wrote these entries (see the pid check in ``_rotate_session`` and
+    ``_close_all_streams``): every entry here was inherited via a fork's
+    memory copy, not opened by this process. Their underlying OS
+    resources — for ``_STREAMS`` specifically, a live Arrow IPC stream with
+    its end-of-stream marker not yet written — may still be genuinely in use
+    by the parent process or a sibling that inherited the same file
+    descriptor. Calling ``.close()`` (as ``_evict`` does) would write into a
+    file this process never opened and does not solely own, corrupting it
+    for whichever process actually does. The correct move is to forget these
+    references entirely; this process opens its own, independent files from
+    here on, via the ordinary lazy-open path in ``_append``/``_open_stream``.
+    """
+    _STREAMS.clear()
+    _SINKS.clear()
+    _SCHEMAS.clear()
+
 
 def _evict(keys: Iterable[_StreamKey]) -> None:
     """Close and drop the registry entries for ``keys``, best-effort.
 
     Shared by session rotation (evicting a stale session's entries) and
-    process-exit cleanup (evicting everything). Closing writes each stream's
-    end-of-stream marker; a close that fails (or is skipped entirely, at
-    process exit under a hard kill) just leaves that file without a clean EOS
-    marker, which the reader's truncation-tolerant path already handles — so
-    failures here are swallowed rather than raised.
+    process-exit cleanup (evicting everything) — both call sites only ever
+    reach this after their own pid check confirms the entries being closed
+    were genuinely opened by this process, not inherited from a fork (see
+    ``_discard_inherited_registry`` for the alternative used otherwise).
+    Closing writes each stream's end-of-stream marker; a close that fails
+    (or is skipped entirely, at process exit under a hard kill) just leaves
+    that file without a clean EOS marker, which the reader's
+    truncation-tolerant path already handles — so failures here are
+    swallowed rather than raised.
     """
     for key in keys:
         try:  # noqa: SIM105
@@ -239,14 +269,36 @@ def _evict(keys: Iterable[_StreamKey]) -> None:
 def _rotate_session(session: str) -> None:
     """Close all streams not belonging to ``session`` on a session change.
 
-    Called on every write. When the incoming session differs from the one this
-    worker was serving, every prior session's stream is closed and evicted.
-    This bounds open file descriptors to a single session's outputs even on a
-    persistent worker reused across many sweeps or resumes, without any
-    root-side coordination: the transition is detected locally from the token
-    the writer already carries.
+    Called on every write. Two independent staleness checks run here, in
+    order:
+
+    1. Has this process's identity changed since the registry was last
+       written BY this process? (``os.getpid()`` vs. ``_REGISTRY_PID``.) A
+       mismatch means the registry currently reflects nothing this process
+       itself opened — either this is genuinely the first call ever, or
+       this process is a fork of one that already had entries open, which
+       fork's memory-copy semantics would otherwise let it silently inherit
+       and write into. Either way, every entry is discarded (without
+       closing — see ``_discard_inherited_registry``) before anything else
+       runs.
+    2. Has the incoming session changed within THIS process's own writing
+       history? When it has, every prior session's stream is closed and
+       evicted — this process genuinely owns those files, so closing them
+       properly (writing their end-of-stream marker) is correct here,
+       unlike case 1.
+
+    This bounds open file descriptors to a single session's outputs even on
+    a persistent worker reused across many sweeps or resumes, without any
+    root-side coordination: both transitions are detected locally, from
+    process identity and the token the writer already carries.
     """
-    global _CURRENT_SESSION  # noqa: PLW0603
+    global _CURRENT_SESSION, _REGISTRY_PID  # noqa: PLW0603
+    pid = os.getpid()
+    if pid != _REGISTRY_PID:
+        _discard_inherited_registry()
+        _CURRENT_SESSION = None
+        _REGISTRY_PID = pid
+
     if session == _CURRENT_SESSION:
         return
     _evict([key for key in _STREAMS if key[0] != session])
@@ -260,7 +312,17 @@ def _close_all_streams() -> None:
     streams with no EOS marker; the reader's truncation-tolerant path
     recovers every complete batch written before the kill, so this close is
     an optimization for clean shutdown, not a correctness requirement.
+
+    Guarded by the same pid check as ``_rotate_session``: a worker that was
+    forked but never actually wrote anything (e.g. an idle pool worker never
+    dispatched a task) can still exit with inherited-but-never-revalidated
+    registry entries. Closing those would be exactly the hazard
+    ``_discard_inherited_registry`` exists to avoid — this process never
+    opened them and may not be their sole owner.
     """
+    if os.getpid() != _REGISTRY_PID:
+        _discard_inherited_registry()
+        return
     _evict(list(_STREAMS))
 
 
@@ -287,11 +349,11 @@ class DiskReference:
 class DiskStreamWriter:
     """Stateless, per-job-pickleable handle that appends run outcomes to disk.
 
-    Carries only configuration — the store directory, the session token, and
-    an optional per-output schema map. All mutable state (open streams, fixed
-    schemas) lives in the module-level registry, keyed per output and per
-    worker process. Constructed by ``DiskStore.writer()`` and re-pickled with
-    every job.
+    Carries only configuration — the store directory, the session token, a
+    lazily-minted uuid, and an optional per-output schema map. All mutable
+    state about open streams and fixed schemas lives in the module-level
+    registry, keyed per output and per worker process. Constructed by
+    ``DiskStore.writer()`` and re-pickled with every job.
 
     Normally reached only via ``DiskStore.writer()``, which validates
     ``schemas`` once at ``DiskStore`` construction time. This class validates
@@ -334,10 +396,28 @@ class DiskStreamWriter:
         self.session = session
         self.schemas = schemas or {}
         _validate_schemas(self.schemas)
+        # Must stay None here — never set eagerly. See the module
+        # docstring's ``uuid`` bullet: an eagerly-set value would be baked
+        # into every pickled copy of this writer, defeating the entire
+        # point of scoping it to the instance. Minted lazily, on first use,
+        # by _instance_uuid().
+        self._uuid: str | None = None
+
+    def _instance_uuid(self) -> str:
+        """Return this writer instance's uuid, minting it on first call.
+
+        Stored on the instance, not the module — see the module docstring's
+        ``uuid`` bullet for why a module-level value, even a lazily-computed
+        one, is not sufficient to guarantee uniqueness across forked
+        workers.
+        """
+        if self._uuid is None:
+            self._uuid = uuid.uuid4().hex
+        return self._uuid
 
     def _file_for(self, output_name: str) -> Path:
         """Path to this worker's Arrow file for a named output."""
-        filename = f"worker-{self.session}-{_HOST}-{_worker_uuid()}.arrow"
+        filename = f"worker-{self.session}-{_HOST}-{self._instance_uuid()}.arrow"
         return self.store_dir / "outputs" / output_name / filename
 
     def to_reference(

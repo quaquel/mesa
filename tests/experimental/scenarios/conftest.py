@@ -27,13 +27,20 @@ def _reset_disk_writer_registry():
     Keyed only by (session, output name) — not store_dir — so it must be
     reset before and after every test, or two tests reusing the same
     session string (or a DiskStreamWriter left with an open stream) would
-    silently leak state into each other.
+    silently leak state into each other. _REGISTRY_PID is reset alongside
+    _CURRENT_SESSION for the same reason: leaving a stale value from a prior
+    test would make the next test's first _rotate_session call believe the
+    registry was inherited from a different process (harmless here, since
+    the dicts are already empty either way, but the fixture should actually
+    reset everything it documents itself as resetting).
     """
     disk_writer._evict(list(disk_writer._STREAMS))
     disk_writer._CURRENT_SESSION = None
+    disk_writer._REGISTRY_PID = None
     yield
     disk_writer._evict(list(disk_writer._STREAMS))
     disk_writer._CURRENT_SESSION = None
+    disk_writer._REGISTRY_PID = None
 
 
 class _DummyRecorder:
