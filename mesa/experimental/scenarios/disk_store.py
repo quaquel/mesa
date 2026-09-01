@@ -396,7 +396,7 @@ class DiskStore:
         A torn tail (a worker killed mid-write) surfaces as one of two
         distinct pyarrow exception types, depending on exactly where the
         truncation lands: ``pa.ArrowInvalid`` when the message itself is
-        corrupted/unparseable, or ``OSError`` when the message's header
+        corrupted/unparsable, or ``OSError`` when the message's header
         parsed fine but declared a body length longer than what's actually
         left in the file (a short read). ``OSError`` is not a broadened
         catch-all here — pyarrow's ``ArrowIOError`` is a direct alias for the
