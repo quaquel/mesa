@@ -6,13 +6,34 @@ import pandas as pd
 import pytest
 
 from mesa import Model
-from mesa.experimental.scenarios import RunConfiguration, Scenario
+from mesa.experimental.scenarios import (
+    DiskStore,
+    RunConfiguration,
+    Scenario,
+    disk_writer,
+)
 from mesa.experimental.scenarios.store import InMemoryStore
 
 
 @pytest.fixture(autouse=True)
 def _reset_scenario_ids():
     Scenario._ids.clear()
+
+
+@pytest.fixture(autouse=True)
+def _reset_disk_writer_registry():
+    """disk_writer's stream registry is a module-level global, not per-store.
+
+    Keyed only by (session, output name) — not store_dir — so it must be
+    reset before and after every test, or two tests reusing the same
+    session string (or a DiskStreamWriter left with an open stream) would
+    silently leak state into each other.
+    """
+    disk_writer._evict(list(disk_writer._STREAMS))
+    disk_writer._CURRENT_SESSION = None
+    yield
+    disk_writer._evict(list(disk_writer._STREAMS))
+    disk_writer._CURRENT_SESSION = None
 
 
 class _DummyRecorder:
@@ -98,6 +119,32 @@ class _ConditionalConfig(RunConfiguration):
         super().run_model(model)
 
 
+class _VariableRowsRecorder:
+    """Recorder whose 'results' table has as many rows as it's constructed with."""
+
+    def __init__(self, n_rows):
+        self._n_rows = n_rows
+
+    def get_all_dataframes(self):
+        return {"results": pd.DataFrame({"value": list(range(self._n_rows))})}
+
+    def get_table_dataframe(self, key):
+        return self.get_all_dataframes()[key]
+
+
+class _VariableRowsModel(Model):
+    """A model whose 'results' output row count is set by scenario.n_rows.
+
+    n_rows=0 exercises the empty-vs-populated-frame schema corner case that
+    DiskStore's schemas parameter exists to avoid. Module-level so it
+    pickles to process workers.
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.data_recorder = _VariableRowsRecorder(getattr(self.scenario, "n_rows", 1))
+
+
 @pytest.fixture
 def basic_config():
     """Basic scenario configuration."""
@@ -116,6 +163,19 @@ def populated_store(scenario_list, basic_config):
     store = InMemoryStore()
     store.write_scenarios(scenario_list, basic_config)
     return store, scenario_list
+
+
+@pytest.fixture
+def disk_store(tmp_path):
+    """A fresh DiskStore rooted at a subdirectory of tmp_path."""
+    return DiskStore(tmp_path / "store")
+
+
+@pytest.fixture
+def populated_disk_store(disk_store, scenario_list, basic_config):
+    """A DiskStore with scenarios recorded (all PENDING), mirroring populated_store."""
+    disk_store.write_scenarios(scenario_list, basic_config)
+    return disk_store, scenario_list
 
 
 @pytest.fixture(params=["sequential", "process"])

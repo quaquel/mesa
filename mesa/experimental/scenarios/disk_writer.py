@@ -470,15 +470,13 @@ class DiskStreamWriter:
         left untouched without paying to deep-copy its existing data. The
         scalars broadcast across the frame's row count, including zero rows.
 
-        For a schema'd output, the batch is then built against the full
+    For a schema'd output, the batch is then built against the full
         schema (user columns + identity columns) directly rather than left to
         pyarrow's inference: this casts the frame's columns to the declared
-        types. ``safe=True`` is passed explicitly (pyarrow's own default, but
-        pinned here rather than left implicit) so an unsafe cast — e.g.
-        float64 to a declared int32 that would lose precision — raises rather
-        than silently truncating. This is what removes the
-        empty-vs-populated-frame schema-mismatch corner case for that output
-        — see the ``schemas`` parameter on ``__init__``.
+        types. Casting behavior on a lossy conversion (e.g. float64 to a declared
+        int32) is whatever pyarrow does internally. This does, however, removes the
+        empty-vs-populated-frame schema-mismatch corner case for that output — see
+        the ``schemas`` parameter on ``__init__``.
         """
         user_schema = self.schemas.get(name)
         if user_schema is not None:
@@ -489,8 +487,7 @@ class DiskStreamWriter:
         )
         try:
             return pa.RecordBatch.from_pandas(
-                frame, schema=self._full_schema(name), preserve_index=False, safe=True
-            )
+                frame, schema=self._full_schema(name), preserve_index=False)
         except (pa.ArrowInvalid, pa.ArrowTypeError, pa.ArrowNotImplementedError) as e:
             raise ValueError(
                 f"output {name!r} for {run_id} is not Arrow-convertible: {e}"

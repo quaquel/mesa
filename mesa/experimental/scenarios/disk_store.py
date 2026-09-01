@@ -392,6 +392,17 @@ class DiskStore:
 
         Returns the table of all complete batches, or None if the file has no
         readable batches (empty, or torn before the first batch completed).
+
+        A torn tail (a worker killed mid-write) surfaces as one of two
+        distinct pyarrow exception types, depending on exactly where the
+        truncation lands: ``pa.ArrowInvalid`` when the message itself is
+        corrupted/unparseable, or ``OSError`` when the message's header
+        parsed fine but declared a body length longer than what's actually
+        left in the file (a short read). ``OSError`` is not a broadened
+        catch-all here — pyarrow's ``ArrowIOError`` is a direct alias for the
+        builtin ``OSError``, not a distinct subclass, so this is the exact
+        type pyarrow raises for that second case, confirmed against Arrow's
+        own source.
         """
         try:
             with pa.OSFile(str(path), "rb") as source:
@@ -400,14 +411,13 @@ class DiskStore:
                 try:
                     for batch in reader:
                         batches.append(batch)
-                except pa.ArrowInvalid:
-                    # torn tail: a worker killed mid-write left an incomplete
-                    # message. Everything before it is intact.
+                except (pa.ArrowInvalid, OSError):
+                    # torn tail: everything before it is intact.
                     pass
                 if not batches:
                     return None
                 return pa.Table.from_batches(batches)
-        except pa.ArrowInvalid:
+        except (pa.ArrowInvalid, OSError):
             # torn before even the schema/first batch was readable
             return None
 
