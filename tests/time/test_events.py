@@ -633,6 +633,23 @@ class TestEventListCancelCount:
         assert el._n_canceled == 0
         assert len(el) == 0
 
+    def test_cancel_after_clear_does_not_corrupt_count(self):
+        """Canceling an event that was removed by clear() must not affect the list."""
+        el = EventList()
+        fn = MagicMock()
+        stale = Event(1.0, fn)
+        el.add_event(stale)
+        el.clear()
+
+        live = [Event(float(i), fn) for i in range(10)]
+        for e in live:
+            el.add_event(e)
+
+        stale.cancel()
+
+        assert el._n_canceled == 0
+        assert len(el) == 10
+
     def test_is_empty_when_only_tombstones_remain(self):
         el = EventList()
         fn = MagicMock()
@@ -767,6 +784,32 @@ class TestEventGeneratorStartStop:
         model.run_for(0.1)
         fn.assert_called_once()
 
+    def test_start_with_schedule_start_in_past_raises(self, setup):
+        """Starting a generator whose schedule.start has passed must not rewind time."""
+        model, fn = setup
+        model.run_until(5.0)
+        gen = EventGenerator(model, fn, Schedule(interval=1.0, start=1.0))
+
+        with pytest.raises(ValueError, match="in the past"):
+            gen.start()
+        assert not gen.is_active
+        assert gen not in model._event_generators
+
+    def test_restart_after_schedule_start_passed_raises(self, setup):
+        """Restarting a stopped generator with a past schedule.start must not replay old events."""
+        model, fn = setup
+        gen = model.schedule_recurring(fn, Schedule(interval=1.0, start=1.0))
+        model.run_until(5.0)
+        gen.stop()
+        fn.reset_mock()
+
+        with pytest.raises(ValueError, match="in the past"):
+            gen.start()
+
+        model.run_for(3.0)
+        fn.assert_not_called()
+        assert model.time == 8.0
+
     def test_start_when_active_is_noop(self, setup):
         """Test that starting when active does nothing."""
         model, fn = setup
@@ -785,6 +828,45 @@ class TestEventGeneratorStartStop:
 
         model.run_for(5.0)
         fn.assert_not_called()
+
+    def test_stop_from_within_callback(self, setup):
+        """Stopping from the callback must not reschedule a next event."""
+        model, _ = setup
+        calls = []
+        gen = None
+
+        def cb():
+            calls.append(model.time)
+            gen.stop()
+
+        gen = EventGenerator(model, cb, Schedule(interval=1.0, start=1.0))
+        gen.start()
+        model.run_for(5.0)
+
+        assert calls == [1.0]
+        assert not gen.is_active
+        assert gen.next_scheduled_time is None
+
+    def test_pause_from_within_callback(self, setup):
+        """Pausing from the callback must not reschedule until resume."""
+        model, _ = setup
+        calls = []
+        gen = None
+
+        def cb():
+            calls.append(model.time)
+            if len(calls) == 1:
+                gen.pause()
+
+        gen = EventGenerator(model, cb, Schedule(interval=1.0, start=1.0))
+        gen.start()
+        model.run_for(5.0)
+        assert calls == [1.0]
+        assert gen.next_scheduled_time is None
+
+        gen.resume()
+        model.run_for(2.0)
+        assert calls == [1.0, 6.0, 7.0]
 
 
 class TestEventGeneratorExecution:

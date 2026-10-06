@@ -306,6 +306,10 @@ class EventGenerator:
         fn()
         self._execution_count += 1
 
+        # The callback may have stopped or paused this generator.
+        if not self._active or self._paused:
+            return
+
         # Schedule next event if we shouldn't stop
         next_time = self.model.time + self._get_interval()
         if not self._should_stop(next_time):
@@ -329,9 +333,19 @@ class EventGenerator:
 
         Returns:
             Self for method chaining
+
+        Raises:
+            ValueError: If schedule.start is in the past, e.g. when restarting
+                a stopped generator after its start time has passed.
         """
         if self._active:
             return self
+
+        if self.schedule.start is not None and self.schedule.start < self.model.time:
+            raise ValueError(
+                f"Cannot start recurring schedule in the past. "
+                f"Start time is {self.schedule.start}, current time is {self.model.time}"
+            )
 
         if self.schedule.start is not None:
             start_time = self.schedule.start
@@ -576,5 +590,8 @@ class EventList:
 
     def clear(self) -> None:
         """Clear the event list."""
+        # Detach the events, so a later cancel() is not counted against this list.
+        for event in self._events:
+            event._owner = None
         self._events.clear()
         self._n_canceled = 0
