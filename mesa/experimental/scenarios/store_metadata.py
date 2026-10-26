@@ -240,8 +240,7 @@ def write_scenarios_manifest(store_dir: Path, scenarios: list[Scenario]) -> None
 
     """
     entries = [scenario.to_dict() for scenario in scenarios]
-    content = json.dumps(entries, default=_json_default, indent=2
-    )
+    content = json.dumps(entries, default=_json_default, indent=2)
     with (store_dir / SCENARIOS_MANIFEST).open("x") as f:
         f.write(content)
 
