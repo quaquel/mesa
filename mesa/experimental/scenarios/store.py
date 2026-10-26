@@ -70,7 +70,18 @@ class Store(Protocol):
         ...
 
     def retrieve_output(self, run_id: RunId) -> dict[str, pd.DataFrame]:
-        """Resolve a reference back to its outcome."""
+        """Resolve a reference back to its outcome.
+
+        The returned dict's keys are not guaranteed to be exactly the output
+        names this run wrote: an implementation that cannot durably record
+        per-run output membership (e.g., DiskStore, which infers membership
+        from whichever output subdirectories exist anywhere in the store) may
+        return a superset — every output name known to the store, with an
+        empty frame standing in for one this run never wrote to. That empty
+        frame is then indistinguishable from a run that legitimately wrote a
+        valid zero-row batch to that output on purpose. A caller that needs
+        to tell the two apart must not rely on this method alone.
+        """
         ...
 
     def write_scenarios(

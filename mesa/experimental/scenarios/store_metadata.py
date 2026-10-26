@@ -79,15 +79,24 @@ def write_store_manifest(
         provenance: informational, non-gating metadata to record alongside the
             manifest. Build this via ``collect_provenance`` before calling.
 
+    We dump the manifest to a string first to avoid writing partial data to the
+    file if an error occurs during serialization.
+
     """
     manifest = {
         "store_format_version": STORE_FORMAT_VERSION,
         "sessions": [session],
         "provenance": provenance or {},
     }
+
+    content = json.dumps(
+        manifest,
+        indent=2,
+    )
+
     path = store_dir / STORE_MANIFEST
     with path.open("x") as f:  # "x": creation is a one-time event; fail loud
-        json.dump(manifest, f, indent=2)
+        f.write(content)
 
 
 def read_store_manifest(store_dir: Path) -> dict[str, Any]:
@@ -226,10 +235,15 @@ def write_scenarios_manifest(store_dir: Path, scenarios: list[Scenario]) -> None
     The other parameters in a scenario are cast to python native types. So e.g.,
     a np.int64 is cast to a python int.
 
+    We dump the manifest to a string first to avoid writing partial data to the file
+    if an error occurs during serialization.
+
     """
     entries = [scenario.to_dict() for scenario in scenarios]
+    content = json.dumps(entries, default=_json_default, indent=2
+    )
     with (store_dir / SCENARIOS_MANIFEST).open("x") as f:
-        json.dump(entries, f, default=_json_default, indent=2)
+        f.write(content)
 
 
 def read_scenarios_manifest(

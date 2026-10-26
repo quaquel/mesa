@@ -213,18 +213,29 @@ class DiskStore:
     ) -> None:
         """Record the full ensemble before dispatch.
 
-        Writes ``store.json`` exclusively (failing if the directory already
-        holds one, so a new sweep never silently overwrites an existing
-        store), then the authoritative ``scenarios.json``, then seeds the run
-        set. Every run starts PENDING (the RunRecord default, and absent from
-        the status log); terminal states are recorded in place as the sweep
-        runs.
+        Writes the authoritative ``scenarios.json`` first, then ``store.json``
+        exclusively (failing if the directory already holds one, so a new
+        sweep never silently overwrites an existing store), then seeds the
+        run set. Every run starts PENDING (the RunRecord default, and absent
+        from the status log); terminal states are recorded in place as the
+        sweep runs.
+
+        Deliberately scenarios-before-manifest — the reverse of the files'
+        read order in ``from_directory``, which reads ``store.json`` first.
+        ``scenarios.json`` is the one that can fail on arbitrary user data
+        (a scenario parameter ``write_scenarios_manifest`` can't serialize);
+        ``store.json`` is Mesa-controlled and essentially never fails.
+        Writing the failure-prone one first means a bad parameter raises
+        before either file exists on disk, so a retry on the same directory
+        — after fixing the data — isn't blocked by a ``store.json`` left
+        over from a write that got further than it should have.
 
         Provenance is derived from ``config.model_class`` — the model that
         will actually execute these scenarios — rather than from a value
         supplied separately at construction time, so recorded provenance can
         never diverge from the config that actually ran.
         """
+        store_metadata.write_scenarios_manifest(self.store_dir, scenarios)
         store_metadata.write_store_manifest(
             self.store_dir,
             session=self.session,
@@ -232,7 +243,7 @@ class DiskStore:
                 model_class=config.model_class
             ),
         )
-        store_metadata.write_scenarios_manifest(self.store_dir, scenarios)
+
         for scenario in scenarios:
             run_id = RunId(scenario.scenario_id, scenario.replication_id)
             self._records[run_id] = RunRecord(scenario=scenario)
