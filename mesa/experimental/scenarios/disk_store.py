@@ -86,10 +86,6 @@ class DiskStore:
         Args:
             store_dir: root directory of the store. The directory is created if
                        it does not yet exist on disk.
-            on_schema_conflict: how the read path resolves outputs whose schemas
-                differ across workers — ``"warn"`` unifies with null-fill and
-                warns, ``"raise"`` raises. Within-worker deviation is always an
-                error, caught earlier by the writer.
             schemas: optional per-output Arrow schema, keyed by output name.
                 Passed straight through to every ``DiskStreamWriter`` (see its
                 ``schemas`` parameter). If passed, this will be used instead
@@ -98,6 +94,10 @@ class DiskStore:
                 frame for that output, since an empty column's inferred type
                 does not reliably match the type inferred from a later non-empty
                 batch of the same output.
+            on_schema_conflict: how the read path resolves outputs whose schemas
+                differ across workers — ``"warn"`` unifies with null-fill and
+                warns, ``"raise"`` raises. Within-worker deviation is always an
+                error, caught earlier by the writer.
 
         Raises:
             ValueError: if ``on_schema_conflict`` is invalid, or if any
