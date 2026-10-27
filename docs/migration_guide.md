@@ -8,6 +8,45 @@ Mesa 4.0 completes the deprecation cycles announced across Mesa 3.x by removing 
 
 Install the 4.0 pre-release with `pip install -U --pre "mesa[rec]"` — plain `pip install -U "mesa[rec]"` (no `--pre`) resolves to the latest stable release instead, which is still Mesa 3.5.1 .
 
+### Experimental meta-agents API reworked
+
+Meta-agents still live in `mesa.experimental.meta_agents`, but the API has been rewritten. The old helpers (`create_meta_agent`, unbound `MetaAgent(...)`, `agent.meta_agent`, `agent.meta_agents`, and `constituting_*` mutators) are gone. A membership manager on the model tracks who belongs to which group; read and write memberships only through `model.meta_agents`.
+
+```python
+# Old
+from mesa.experimental.meta_agents.meta_agent import create_meta_agent
+
+group = create_meta_agent(model, "Team", [alice, bob], Agent)
+alice.meta_agent
+group.add_constituting_agents([carol])
+list(group.agents)
+
+# New
+from mesa.experimental.meta_agents import MetaAgents
+
+model.meta_agents = MetaAgents(model)
+model.meta_agents.create("Team", [alice, bob])
+model.meta_agents.groups_of(alice)
+model.meta_agents.add_member("Team", carol)
+model.meta_agents.members_of("Team")
+```
+
+`find_combinations` and `evaluate_combination` remain as discovery helpers but are now staticmethods on `MetaAgents`; the module-level imports are gone. Call them through the membership manager.
+
+```python
+# Old
+from mesa.experimental.meta_agents import find_combinations
+
+combinations = find_combinations(model, agents, size=2, evaluation_func=score)
+
+# New
+combinations = model.meta_agents.find_combinations(
+    agents, size=2, evaluation_func=score
+)
+```
+
+The warehouse example in [mesa-examples](https://github.com/mesa/mesa-examples) still uses the old factory and needs a matching update.
+
 ### Simulator classes removed
 The experimental `Simulator`, `ABMSimulator`, and `DEVSimulator` classes, and the `mesa.experimental.devs` package that contained them, have been removed outright. They were deprecated in Mesa 3.5.0 (see "Event scheduling and time advancement" under the Mesa 3.5.0 section below) in favor of scheduling methods defined directly on `Model`. The lower-level primitives they were built on — `Event`, `EventGenerator`, `EventList`, `Priority`, `Schedule` — are unaffected and still live in the stable `mesa.time` module.
 
@@ -535,8 +574,8 @@ You can access it by `Model.steps`, and it's internally in the datacollector, ba
 #### Removal of `Model._advance_time()`
 - The `Model._advance_time()` method is removed. This now happens automatically.
 
-#### Replacing Schedulers with AgentSet functionality
-The whole Time module in Mesa is deprecated and will be removed in Mesa 3.1. All schedulers should be replaced with AgentSet functionality and the internal `Model.steps` counter. This allows much more flexibility in how to activate Agents and makes it explicit what's done exactly.
+#### Replacing Schedulers with AgentSet features
+The whole Time module in Mesa is deprecated and will be removed in Mesa 3.1. All schedulers should be replaced with AgentSet features and the internal `Model.steps` counter. This allows much more flexibility in how to activate Agents and makes it explicit what's done exactly.
 
 Here's how to replace each scheduler:
 
@@ -611,7 +650,7 @@ for agent_class in self.agent_types:
 ```
 
 ###### Replacing `step_type`
-The `RandomActivationByType` scheduler had a `step_type` method that allowed stepping only agents of a specific type. To replicate this functionality using AgentSet:
+The `RandomActivationByType` scheduler had a `step_type` method that allowed stepping only agents of a specific type. To replicate this behavior using AgentSet:
 
 Replace:
 ```python

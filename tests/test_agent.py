@@ -95,12 +95,11 @@ def test_agent_create_with_pandas():
     for i, agent in enumerate(agents):
         assert agent.kw_series_attr == kw_series_data.iloc[i]
 
-    # Test pandas Series with length mismatch
+    # A sequence whose length does not match n now raises instead of
+    # broadcasting the whole sequence to every agent.
     short_series = pd.Series([1, 2])  # length 2, but n=5
-    agents = TestAgent.create_agents(model, n, short_series)
-    for agent in agents:
-        # Should repeat the entire series, not individual elements
-        assert agent.series_attr.equals(short_series)
+    with pytest.raises(ValueError, match="does not match the number of agents"):
+        TestAgent.create_agents(model, n, short_series)
 
 
 def test_agent_from_dataframe():
@@ -308,3 +307,30 @@ def test_agent_repr_with_various_types():
     assert "count=42" in r
     assert "status=None" in r
     assert "items=[1, 2, 3]" in r
+
+
+def test_agent_remove_cleans_up_datasets():
+    """Test that remove() removes the agent from every dataset it belongs to."""
+
+    class DatasetAgent(AgentTest):
+        pass
+
+    model = Model()
+    dataset = model.data_registry.track_agents_numpy(
+        DatasetAgent, "my_dataset", fields="x"
+    )
+
+    agent = DatasetAgent(model)
+    assert agent in dataset.active_agents
+
+    agent.remove()
+
+    assert agent not in dataset.active_agents
+    assert len(dataset) == 0
+
+
+def test_agent_advance_is_noop():
+    """Test that advance() is a no-op."""
+    model = Model()
+    agent = AgentTest(model)
+    assert agent.advance() is None
